@@ -2,6 +2,41 @@ const USERS_STORAGE_KEY = 'mini-super.users'
 const SESSION_STORAGE_KEY = 'mini-super.session'
 const PASSWORD_ITERATIONS = 310000
 
+export const DEFAULT_USER_PREFERENCES = {
+  theme: 'light',
+  palette: 'red',
+  profilePhoto: null,
+}
+
+function getAccountPreferences(account) {
+  const preferences = account.preferences ?? {}
+  return {
+    ...DEFAULT_USER_PREFERENCES,
+    ...preferences,
+    theme: ['light', 'dark', 'system'].includes(preferences.theme)
+      ? preferences.theme
+      : DEFAULT_USER_PREFERENCES.theme,
+    palette: [
+      'red', 'blue', 'purple', 'green', 'pink', 'orange', 'gray', 'turquoise', 'yellow',
+    ].includes(preferences.palette)
+      ? preferences.palette
+      : DEFAULT_USER_PREFERENCES.palette,
+    profilePhoto: typeof preferences.profilePhoto === 'string'
+      ? preferences.profilePhoto
+      : null,
+  }
+}
+
+function toSessionUser(account) {
+  return {
+    id: account.id,
+    username: account.username,
+    email: account.email,
+    role: account.role === 'admin' ? 'admin' : 'user',
+    preferences: getAccountPreferences(account),
+  }
+}
+
 function readUsers() {
   const serializedUsers = window.localStorage.getItem(USERS_STORAGE_KEY)
   if (!serializedUsers) return []
@@ -131,12 +166,7 @@ export async function authenticateUser(email, password) {
     throw new Error('El correo o la contraseña no son correctos.')
   }
 
-  return {
-    id: user.id,
-    username: user.username,
-    email: user.email,
-    role: user.role === 'admin' ? 'admin' : 'user',
-  }
+  return toSessionUser(user)
 }
 
 export function getStoredSessionUser() {
@@ -157,12 +187,28 @@ export function getStoredSessionUser() {
   const user = readUsers().find((account) => account.id === session.userId)
   if (!user) return null
 
-  return {
-    id: user.id,
-    username: user.username,
-    email: user.email,
-    role: user.role === 'admin' ? 'admin' : 'user',
+  return toSessionUser(user)
+}
+
+export function saveUserPreferences(userId, preferences) {
+  const users = readUsers()
+  const accountIndex = users.findIndex((account) => account.id === userId)
+  if (accountIndex < 0) throw new Error('No se encontró la cuenta para guardar preferencias.')
+
+  const currentPreferences = getAccountPreferences(users[accountIndex])
+  const nextPreferences = {
+    ...currentPreferences,
+    ...preferences,
   }
+  users[accountIndex] = { ...users[accountIndex], preferences: nextPreferences }
+
+  try {
+    window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users))
+  } catch {
+    throw new Error('No se pudieron guardar las preferencias. La fotografía puede ser demasiado grande.')
+  }
+
+  return nextPreferences
 }
 
 export function saveSession(userId) {

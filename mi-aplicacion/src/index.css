@@ -10,17 +10,22 @@
   --color-primary: #751f32;
   --color-primary-dark: #5e1727;
   --color-secondary: #f8dfe6;
+  --color-accent-soft: #f8dfe6;
   --color-background: #f8f6f6;
   --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
   --color-text: #252326;
   --color-muted: #777178;
   --color-border: #eee8ea;
   --shadow-card: 0 12px 35px rgb(61 24 35 / 6%);
+  color-scheme: light;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
+  color: var(--color-text);
+  background: var(--color-background);
 }
 
 #root {

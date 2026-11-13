@@ -13,6 +13,7 @@ import {
 import { useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import MiniSuperLogo from '../components/MiniSuperLogo.jsx'
+import ProfileAvatar from '../components/ProfileAvatar.jsx'
 import useAuth from '../hooks/useAuth.js'
 import sections from '../utils/sections.js'
 
@@ -43,7 +44,11 @@ function MainMenuPage() {
             className="dashboard-profile-link"
             to="/perfil"
           >
-            <UserRound size={20} aria-hidden="true" />
+            <ProfileAvatar
+              className="menu-profile-avatar"
+              photo={user.preferences?.profilePhoto}
+              username={user.username}
+            />
             <span>{user.username}</span>
           </Link>
           <button

@@ -13,7 +13,9 @@ import { BrowserRouter, Link, Navigate, NavLink, Route, Routes } from 'react-rou
 import AuthProvider from './context/AuthProvider.jsx'
 import useAuth from './hooks/useAuth.js'
 import MiniSuperLogo from './components/MiniSuperLogo.jsx'
+import ProfileAvatar from './components/ProfileAvatar.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
+import InventoryPage from './pages/InventoryPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import MainMenuPage from './pages/MainMenuPage.jsx'
 import ProductDetailsPage from './pages/ProductDetailsPage.jsx'
@@ -22,6 +24,8 @@ import ProfilePage from './pages/ProfilePage.jsx'
 import RegisterPage from './pages/RegisterPage.jsx'
 import RegisterProductPage from './pages/RegisterProductPage.jsx'
 import ReportsPage from './pages/ReportsPage.jsx'
+import SalesPage from './pages/SalesPage.jsx'
+import SettingsPage from './pages/SettingsPage.jsx'
 import SectionPlaceholder from './pages/SectionPlaceholder.jsx'
 import WelcomePage from './pages/WelcomePage.jsx'
 import { isAdmin } from './utils/auth.js'
@@ -109,7 +113,14 @@ function SectionApp() {
         </nav>
 
         <div className="sidebar-account">
-          <strong>{user.username}</strong>
+          <div className="sidebar-account-identity">
+            <ProfileAvatar
+              className="sidebar-account-avatar"
+              photo={user.preferences?.profilePhoto}
+              username={user.username}
+            />
+            <strong>{user.username}</strong>
+          </div>
           <span>{isAdmin(user) ? 'Administrador' : 'Usuario'}</span>
           <Link
             aria-label="Cerrar sesión"
@@ -137,20 +148,31 @@ function SectionApp() {
             className="dashboard-topbar-icon"
             to="/perfil"
           >
-            <UserRound size={20} aria-hidden="true" />
+            <ProfileAvatar
+              className="topbar-profile-avatar"
+              photo={user.preferences?.profilePhoto}
+              username={user.username}
+            />
           </Link>
         </header>
         <Routes>
           <Route element={<DashboardPage />} path="/dashboard" />
+          <Route element={<InventoryPage />} path="/inventario" />
           <Route element={<ProductDetailsPage />} path="/productos/:productId" />
           <Route element={<ProductsPage />} path="/productos" />
           <Route element={<RegisterProductPage />} path="/registrar-producto" />
           <Route element={<ProfilePage />} path="/perfil" />
           <Route element={<ReportsPage />} path="/reportes" />
+          <Route element={<SalesPage />} path="/ventas" />
+          <Route element={<SettingsPage />} path="/configuracion" />
           {sections
             .filter(
               (section) =>
-                section.path !== '/productos' && section.path !== '/reportes',
+                section.path !== '/productos' &&
+                section.path !== '/reportes' &&
+                section.path !== '/inventario' &&
+                section.path !== '/ventas' &&
+                section.path !== '/configuracion',
             )
             .map((section) => (
             <Route

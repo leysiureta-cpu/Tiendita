@@ -9,6 +9,7 @@ import {
   SALES_STORAGE_KEY,
   saveSalesReport,
 } from '../utils/reports.js'
+import { SALES_UPDATED_EVENT } from '../utils/sales.js'
 
 const currencyFormatter = new Intl.NumberFormat('es-MX', {
   style: 'currency',
@@ -82,17 +83,20 @@ function ReportsPage() {
         setSavedState(getInitialSavedReports())
       }
       if (
-        event.type !== REPORTS_UPDATED_EVENT &&
-        (event.key === SALES_STORAGE_KEY || event.key === null)
+        event.type === SALES_UPDATED_EVENT ||
+        (event.type !== REPORTS_UPDATED_EVENT &&
+          (event.key === SALES_STORAGE_KEY || event.key === null))
       ) {
         setSalesState(getInitialSales())
       }
     }
 
     window.addEventListener('storage', refreshStoredData)
+    window.addEventListener(SALES_UPDATED_EVENT, refreshStoredData)
     window.addEventListener(REPORTS_UPDATED_EVENT, refreshStoredData)
     return () => {
       window.removeEventListener('storage', refreshStoredData)
+      window.removeEventListener(SALES_UPDATED_EVENT, refreshStoredData)
       window.removeEventListener(REPORTS_UPDATED_EVENT, refreshStoredData)
     }
   }, [])

@@ -13,12 +13,13 @@ import {
   PRODUCTS_UPDATED_EVENT,
   PRODUCTS_STORAGE_KEY,
 } from '../utils/dashboardData.js'
+import { SALES_STORAGE_KEY } from '../utils/reports.js'
+import { SALES_UPDATED_EVENT } from '../utils/sales.js'
 
-const bestSellingExamples = [
-  { name: 'Coca-Cola de 600 ml', quantity: 35 },
-  { name: 'Sabritas', quantity: 28 },
-  { name: 'Leche de 1 litro', quantity: 15 },
-]
+const currencyFormatter = new Intl.NumberFormat('es-MX', {
+  style: 'currency',
+  currency: 'MXN',
+})
 
 function DashboardPage() {
   const [metrics, setMetrics] = useState(getDashboardMetrics)
@@ -29,17 +30,24 @@ function DashboardPage() {
     }
 
     function handleStorageChange(event) {
-      if (!event.key || event.key === PRODUCTS_STORAGE_KEY || event.key === 'mini-super.users') {
+      if (
+        !event.key ||
+        event.key === PRODUCTS_STORAGE_KEY ||
+        event.key === SALES_STORAGE_KEY ||
+        event.key === 'mini-super.users'
+      ) {
         refreshMetrics()
       }
     }
 
     window.addEventListener('storage', handleStorageChange)
     window.addEventListener(PRODUCTS_UPDATED_EVENT, refreshMetrics)
+    window.addEventListener(SALES_UPDATED_EVENT, refreshMetrics)
     window.addEventListener('focus', refreshMetrics)
     return () => {
       window.removeEventListener('storage', handleStorageChange)
       window.removeEventListener(PRODUCTS_UPDATED_EVENT, refreshMetrics)
+      window.removeEventListener(SALES_UPDATED_EVENT, refreshMetrics)
       window.removeEventListener('focus', refreshMetrics)
     }
   }, [])
@@ -64,11 +72,15 @@ function DashboardPage() {
     },
     {
       title: 'Ventas hoy',
-      value: '485',
-      caption: 'Dato de ejemplo · no son ventas reales',
+      value: metrics.revenueToday === null
+        ? '—'
+        : currencyFormatter.format(metrics.revenueToday),
+      caption: metrics.salesToday === null
+        ? 'No disponibles'
+        : `${metrics.salesToday} ventas registradas hoy`,
       icon: ShoppingCart,
+      path: '/ventas',
       style: 'sales',
-      isExample: true,
     },
     {
       title: 'Usuarios',
@@ -134,9 +146,8 @@ function DashboardPage() {
         <header className="best-sellers-heading">
           <div>
             <h2>Productos más vendidos</h2>
-            <p>Referencia visual para el panel</p>
+            <p>Unidades vendidas registradas</p>
           </div>
-          <span className="example-data-badge">Datos de ejemplo · no son ventas reales</span>
         </header>
 
         <div className="best-sellers-content">
@@ -150,46 +161,91 @@ function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {bestSellingExamples.map((product, index) => (
+                {metrics.bestSellers.map((product, index) => (
                   <tr key={product.name}>
                     <td>{index + 1}</td>
                     <td>{product.name}</td>
                     <td>{product.quantity}</td>
                   </tr>
                 ))}
+                {metrics.bestSellers.length === 0 && (
+                  <tr><td colSpan="3">Aún no hay productos vendidos.</td></tr>
+                )}
               </tbody>
             </table>
           </div>
 
           <figure
-            aria-label="Gráfica de barras con cantidades de productos de ejemplo"
+            aria-label="Gráfica de barras con unidades realmente vendidas"
             className="best-sellers-chart"
           >
             <figcaption>
               <BarChart3 size={17} aria-hidden="true" />
-              Cantidades de ejemplo
+              Unidades vendidas
             </figcaption>
             <div className="horizontal-bar-chart">
-              {bestSellingExamples.map((product, index) => (
+              {metrics.bestSellers.map((product, index) => (
                 <div className="horizontal-bar-row" key={product.name}>
                   <span className="horizontal-bar-label">{product.name}</span>
                   <span
-                    aria-label={`${product.quantity} unidades de ejemplo`}
+                    aria-label={`${product.quantity} unidades vendidas`}
                     className={`horizontal-bar-track bar-tone-${index + 1}`}
                     role="img"
                   >
                     <span
                       className="horizontal-bar-fill"
                       style={{
-                        width: `${(product.quantity / bestSellingExamples[0].quantity) * 100}%`,
+                        width: `${(product.quantity / Math.max(...metrics.bestSellers.map((item) => item.quantity), 1)) * 100}%`,
                       }}
                     />
                   </span>
                   <strong>{product.quantity}</strong>
                 </div>
               ))}
+              {metrics.bestSellers.length === 0 && (
+                <p className="sales-empty">Las unidades vendidas aparecerán aquí.</p>
+              )}
             </div>
           </figure>
+        </div>
+      </section>
+
+      <section className="best-sellers-panel dashboard-inventory-panel">
+        <header className="best-sellers-heading">
+          <div>
+            <h2>Inventario disponible</h2>
+            <p>{metrics.inventory.length} productos registrados</p>
+          </div>
+          <Link className="dashboard-inventory-link" to="/inventario">
+            Ver inventario
+          </Link>
+        </header>
+        <div className="products-table-wrap">
+          <table className="products-table dashboard-inventory-table">
+            <thead>
+              <tr>
+                <th scope="col">ID</th>
+                <th scope="col">Producto</th>
+                <th scope="col">Categoría</th>
+                <th scope="col">Precio</th>
+                <th scope="col">Stock</th>
+              </tr>
+            </thead>
+            <tbody>
+              {metrics.inventory.map((product) => (
+                <tr key={product.id}>
+                  <td>{product.id}</td>
+                  <td>{product.name}</td>
+                  <td>{product.category || 'Sin categoría'}</td>
+                  <td>{currencyFormatter.format(Number(product.price) || 0)}</td>
+                  <td>{Number(product.stock ?? product.quantity) || 0}</td>
+                </tr>
+              ))}
+              {metrics.inventory.length === 0 && (
+                <tr><td colSpan="5">No hay productos registrados.</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
 
