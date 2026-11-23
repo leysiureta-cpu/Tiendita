@@ -25,8 +25,15 @@ export function applyAppearance(preferences) {
   root.dataset.palette = palette.id
   root.style.setProperty('--color-primary', isDark ? palette.darkAccent : palette.primary)
   root.style.setProperty('--color-primary-dark', palette.dark)
+  root.style.setProperty(
+    '--color-primary-hover',
+    isDark
+      ? `color-mix(in srgb, ${palette.darkAccent} 88%, white)`
+      : palette.dark,
+  )
+  root.style.setProperty('--color-on-primary', isDark ? '#111419' : '#fff')
   const softColor = isDark
-    ? `color-mix(in srgb, ${palette.primary} 24%, #1b2028)`
+    ? `color-mix(in srgb, ${palette.darkAccent} 20%, #1b2028)`
     : palette.soft
   root.style.setProperty('--color-secondary', softColor)
   root.style.setProperty('--color-accent-soft', softColor)

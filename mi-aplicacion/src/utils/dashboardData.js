@@ -108,8 +108,7 @@ export function getDashboardMetrics() {
       revenueToday: salesToday.reduce((sum, sale) => sum + (Number(sale.total) || 0), 0),
       bestSellers: [...bestSellers.entries()]
         .map(([name, quantity]) => ({ name, quantity }))
-        .sort((a, b) => b.quantity - a.quantity)
-        .slice(0, 3),
+        .sort((a, b) => b.quantity - a.quantity),
       error: '',
     }
   } catch (error) {

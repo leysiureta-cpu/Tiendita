@@ -9,6 +9,9 @@
   -moz-osx-font-smoothing: grayscale;
   --color-primary: #751f32;
   --color-primary-dark: #5e1727;
+  --color-primary-hover: #5e1727;
+  --color-on-primary: #ffffff;
+  --color-primary-border: color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
   --color-secondary: #f8dfe6;
   --color-accent-soft: #f8dfe6;
   --color-background: #f8f6f6;

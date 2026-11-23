@@ -23,6 +23,10 @@ const currencyFormatter = new Intl.NumberFormat('es-MX', {
 
 function DashboardPage() {
   const [metrics, setMetrics] = useState(getDashboardMetrics)
+  const bestSellerMax = metrics.bestSellers.reduce(
+    (max, product) => Math.max(max, product.quantity),
+    0,
+  )
 
   useEffect(() => {
     function refreshMetrics() {
@@ -151,61 +155,63 @@ function DashboardPage() {
         </header>
 
         <div className="best-sellers-content">
-          <div className="best-sellers-table-wrap">
-            <table className="best-sellers-table">
-              <thead>
-                <tr>
-                  <th scope="col">Número</th>
-                  <th scope="col">Producto</th>
-                  <th scope="col">Cantidad</th>
-                </tr>
-              </thead>
-              <tbody>
-                {metrics.bestSellers.map((product, index) => (
-                  <tr key={product.name}>
-                    <td>{index + 1}</td>
-                    <td>{product.name}</td>
-                    <td>{product.quantity}</td>
-                  </tr>
-                ))}
-                {metrics.bestSellers.length === 0 && (
-                  <tr><td colSpan="3">Aún no hay productos vendidos.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
           <figure
-            aria-label="Gráfica de barras con unidades realmente vendidas"
+            aria-label="Gráfica de barras con unidades vendidas por producto, ordenadas de mayor a menor"
             className="best-sellers-chart"
           >
             <figcaption>
-              <BarChart3 size={17} aria-hidden="true" />
-              Unidades vendidas
+              <span className="best-sellers-chart-title">
+                <BarChart3 size={17} aria-hidden="true" />
+                Unidades vendidas por producto
+              </span>
+              <span className="best-sellers-chart-count">
+                {metrics.bestSellers.length} productos
+              </span>
             </figcaption>
-            <div className="horizontal-bar-chart">
-              {metrics.bestSellers.map((product, index) => (
-                <div className="horizontal-bar-row" key={product.name}>
-                  <span className="horizontal-bar-label">{product.name}</span>
-                  <span
-                    aria-label={`${product.quantity} unidades vendidas`}
-                    className={`horizontal-bar-track bar-tone-${index + 1}`}
-                    role="img"
-                  >
+            {metrics.bestSellers.length > 0 ? (
+              <ol className="horizontal-bar-chart">
+                {metrics.bestSellers.map((product, index) => (
+                  <li className="horizontal-bar-row" key={product.name}>
+                    <div className="horizontal-bar-heading">
+                      <span className="horizontal-bar-rank">
+                        {String(index + 1).padStart(2, '0')}
+                      </span>
+                      <span className="horizontal-bar-label">{product.name}</span>
+                      <strong>
+                        {product.quantity}
+                        <span>unidades</span>
+                      </strong>
+                    </div>
                     <span
-                      className="horizontal-bar-fill"
-                      style={{
-                        width: `${(product.quantity / Math.max(...metrics.bestSellers.map((item) => item.quantity), 1)) * 100}%`,
-                      }}
-                    />
-                  </span>
-                  <strong>{product.quantity}</strong>
-                </div>
-              ))}
-              {metrics.bestSellers.length === 0 && (
-                <p className="sales-empty">Las unidades vendidas aparecerán aquí.</p>
-              )}
-            </div>
+                      aria-label={`${product.name}: ${product.quantity} unidades vendidas`}
+                      className="horizontal-bar-track"
+                      role="img"
+                    >
+                      <span
+                        className="horizontal-bar-fill"
+                        style={{
+                          width: `${(product.quantity / bestSellerMax) * 100}%`,
+                        }}
+                      />
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <div className="best-sellers-empty" role="status">
+                <ShoppingCart size={23} strokeWidth={1.7} aria-hidden="true" />
+                <p>
+                  {metrics.error
+                    ? 'No se pudieron cargar los datos de la gráfica.'
+                    : 'Todavía no hay ventas registradas.'}
+                </p>
+                <span>
+                  {metrics.error
+                    ? 'Inténtalo de nuevo cuando los datos estén disponibles.'
+                    : 'Registra una venta para ver aquí los productos más vendidos.'}
+                </span>
+              </div>
+            )}
           </figure>
         </div>
       </section>

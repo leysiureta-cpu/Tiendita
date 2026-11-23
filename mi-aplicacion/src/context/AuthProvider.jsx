@@ -41,6 +41,7 @@ function AuthProvider({ children }) {
   const updatePreferences = useCallback((preferences) => {
     if (!user) throw new Error('Inicia sesión para personalizar tu cuenta.')
     const savedPreferences = saveUserPreferences(user.id, preferences)
+    applyAppearance(savedPreferences)
     setUser((current) => ({ ...current, preferences: savedPreferences }))
     return savedPreferences
   }, [user])

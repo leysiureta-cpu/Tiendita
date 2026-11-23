@@ -54,6 +54,23 @@ npm run preview
 
 El proyecto también incluye `npm run lint` para ejecutar ESLint.
 
+## Backend Laravel
+
+El backend se encuentra en `backend/`, separado del frontend `mi-aplicacion/`. Requiere PHP 8.3 o posterior con `pdo_mysql`, Composer y MySQL de XAMPP con la base `mini_super` creada. Revisa las variables `DB_*` de `backend/.env` antes de usarlo; ese archivo local está excluido de Git y no debe publicarse.
+
+Desde la raíz del repositorio, entra en `backend/`, consulta el estado y aplica las migraciones pendientes y los datos de referencia:
+
+```powershell
+Set-Location backend
+php artisan migrate:status
+php artisan migrate
+php artisan db:seed
+```
+
+Los seeders pueden ejecutarse de nuevo sin duplicar roles, permisos, métodos de pago, categorías ni productos, y no reemplazan cantidades de inventario existentes. Consulta [backend/README.md](./backend/README.md) para los pasos completos. No ejecutes `migrate:fresh` ni `db:wipe`.
+
+Para generar usuarios y ventas de prueba en `local`, configura `TEST_USERS_PASSWORD` en `backend/.env` con una contraseña privada de al menos 12 caracteres y ejecuta `php artisan db:seed`. Se crean 3 usuarios con los roles existentes, 3 ventas con 3 productos cada una y detalles calculados con los precios actuales. Los seeders son repetibles y no modifican el inventario.
+
 ## Funcionalidades implementadas
 
 - **Inicio de sesión y registro:** formularios de acceso y alta de usuario, con validación de datos y confirmación de contraseña.
@@ -66,7 +83,7 @@ El proyecto también incluye `npm run lint` para ejecutar ESLint.
 - **Perfil y preferencias:** consulta de datos de la cuenta, carga o eliminación de foto de perfil y ajustes de apariencia (tema y paleta de color).
 - **Navegación protegida:** las secciones de la aplicación requieren una sesión iniciada.
 
-Los datos de usuarios, productos, ventas, preferencias y reportes se guardan en el almacenamiento local (`localStorage`) del navegador; no se observa una conexión a un servicio backend en el código actual. El carrito se mantiene durante la operación actual y no se conserva como carrito persistente.
+Los datos actuales del frontend de usuarios, productos, ventas, preferencias y reportes se guardan en el almacenamiento local (`localStorage`) del navegador; todavía no está conectado al backend Laravel separado. El carrito se mantiene durante la operación actual y no se conserva como carrito persistente.
 
 ### Secciones en preparación
 
