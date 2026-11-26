@@ -1,15 +1,43 @@
 import { X } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { getCategories } from '../utils/api.js'
 
 function ProductDialog({ mode, onClose, onSave, product }) {
   const [form, setForm] = useState({
     name: product.name ?? '',
-    category: product.category ?? '',
+    categoryId: product.categoryId ? String(product.categoryId) : '',
     price: product.price ?? '',
     stock: product.stock ?? '',
   })
+  const [categories, setCategories] = useState([])
   const [error, setError] = useState('')
   const isEditing = mode === 'edit'
+
+  useEffect(() => {
+    let active = true
+    getCategories()
+      .then((items) => {
+        if (!active) return
+        setCategories(items)
+        if (!product.categoryId && product.category) {
+          const matchingCategory = items.find((item) => item.name === product.category)
+          if (matchingCategory) {
+            setForm((current) => ({ ...current, categoryId: String(matchingCategory.id) }))
+          }
+        }
+      })
+      .catch((loadError) => {
+        if (active) {
+          setError(loadError instanceof Error
+            ? loadError.message
+            : 'No se pudieron cargar las categorías.')
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [product.category, product.categoryId])
 
   function handleChange(event) {
     const { name, value } = event.target
@@ -17,13 +45,13 @@ function ProductDialog({ mode, onClose, onSave, product }) {
     setError('')
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
     try {
-      onSave({
+      await onSave({
         ...product,
         name: form.name.trim(),
-        category: form.category.trim(),
+        categoryId: Number(form.categoryId),
         price: Number(form.price),
         stock: Number(form.stock),
       })
@@ -77,12 +105,17 @@ function ProductDialog({ mode, onClose, onSave, product }) {
             </label>
             <label>
               Categoría
-              <input
-                name="category"
+              <select
+                name="categoryId"
                 onChange={handleChange}
                 required
-                value={form.category}
-              />
+                value={form.categoryId}
+              >
+                <option value="">Selecciona una categoría</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>{category.name}</option>
+                ))}
+              </select>
             </label>
             <label>
               Precio

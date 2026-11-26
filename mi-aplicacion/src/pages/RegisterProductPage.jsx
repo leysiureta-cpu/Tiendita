@@ -1,33 +1,49 @@
 import { CheckCircle2, PackagePlus } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getProducts, saveProducts } from '../utils/dashboardData.js'
+import { createProduct, getCategories } from '../utils/api.js'
 
-const categories = ['Bebidas', 'Botanas', 'Lácteos', 'Panadería']
 const emptyForm = {
   name: '',
-  category: '',
+  categoryId: '',
   price: '',
   stock: '',
 }
 
-function createProductId(products) {
-  if (typeof window.crypto?.randomUUID !== 'function') {
-    throw new Error('Este navegador no permite generar un ID seguro para el producto.')
-  }
-
-  let id
-  do {
-    id = window.crypto.randomUUID()
-  } while (products.some((product) => String(product.id) === id))
-
-  return id
-}
-
 function RegisterProductPage() {
   const [form, setForm] = useState(emptyForm)
+  const [categories, setCategories] = useState([])
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
+  useEffect(() => {
+    let active = true
+    getCategories()
+      .then((items) => {
+        if (
+          !Array.isArray(items) ||
+          items.some((category) =>
+            !category ||
+            !Number.isInteger(category.id) ||
+            typeof category.name !== 'string'
+          )
+        ) {
+          throw new Error('El servidor devolvió una lista de categorías no válida.')
+        }
+        if (active) setCategories(items)
+      })
+      .catch((loadError) => {
+        if (active) {
+          setError(loadError instanceof Error
+            ? loadError.message
+            : 'No se pudieron cargar las categorías.')
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   function handleChange(event) {
     const { name, value } = event.target
@@ -36,7 +52,7 @@ function RegisterProductPage() {
     setSuccess('')
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
     setError('')
     setSuccess('')
@@ -47,7 +63,7 @@ function RegisterProductPage() {
 
     if (
       !name ||
-      !categories.includes(form.category) ||
+      !categories.some((category) => String(category.id) === form.categoryId) ||
       form.price === '' ||
       form.stock === ''
     ) {
@@ -64,16 +80,13 @@ function RegisterProductPage() {
     }
 
     try {
-      const products = getProducts()
-      const product = {
-        id: createProductId(products),
+      const product = await createProduct({
         name,
-        category: form.category,
+        categoryId: Number(form.categoryId),
         price,
         stock,
-      }
+      })
 
-      saveProducts([...products, product])
       setForm(emptyForm)
       setSuccess(`Producto registrado correctamente. ID: ${product.id}`)
     } catch (saveError) {
@@ -126,17 +139,17 @@ function RegisterProductPage() {
           <label>
             <span>Catálogo o categoría</span>
             <select
-              name="category"
+              name="categoryId"
               onChange={handleChange}
               required
-              value={form.category}
+              value={form.categoryId}
             >
               <option disabled value="">
                 Selecciona una categoría
               </option>
               {categories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
+                <option key={category.id} value={String(category.id)}>
+                  {category.name}
                 </option>
               ))}
             </select>

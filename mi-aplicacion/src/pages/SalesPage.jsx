@@ -15,13 +15,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react'
 import MiniSuperLogo from '../components/MiniSuperLogo.jsx'
 import useAuth from '../hooks/useAuth.js'
-import {
-  getProducts,
-  PRODUCTS_STORAGE_KEY,
-  PRODUCTS_UPDATED_EVENT,
-} from '../utils/dashboardData.js'
-import { getSales, SALES_STORAGE_KEY } from '../utils/reports.js'
-import { registerSale, SALES_UPDATED_EVENT } from '../utils/sales.js'
+import { createSale, getProducts, getSalesRecords } from '../utils/api.js'
 
 const currencyFormatter = new Intl.NumberFormat('es-MX', {
   style: 'currency',
@@ -47,26 +41,13 @@ function formatDateTime(value) {
   }).format(date)
 }
 
-function getStoredProducts() {
-  try {
-    return { products: getProducts(), error: '' }
-  } catch (error) {
-    return {
-      products: [],
-      error: error instanceof Error ? error.message : 'No se pudo cargar el inventario.',
-    }
-  }
-}
-
-function getStoredSales() {
-  try {
-    return { sales: getSales(), error: '' }
-  } catch (error) {
-    return {
-      sales: [],
-      error: error instanceof Error ? error.message : 'No se pudo cargar el historial.',
-    }
-  }
+function localDateKey(value) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function SaleReceipt({ sale, onClose, onNewSale }) {
@@ -127,10 +108,14 @@ function SaleReceipt({ sale, onClose, onNewSale }) {
 
 function SalesPage() {
   const { user } = useAuth()
-  const [productState, setProductState] = useState(getStoredProducts)
-  const [salesState, setSalesState] = useState(getStoredSales)
+  const isAdmin = user?.role === 'admin'
+  const [productState, setProductState] = useState({ products: [], error: '' })
+  const [salesState, setSalesState] = useState({ sales: [], error: '' })
   const [activeView, setActiveView] = useState('venta')
   const [search, setSearch] = useState('')
+  const [historySearch, setHistorySearch] = useState('')
+  const [historyStartDate, setHistoryStartDate] = useState('')
+  const [historyEndDate, setHistoryEndDate] = useState('')
   const [cart, setCart] = useState([])
   const [discountInput, setDiscountInput] = useState('0')
   const [paymentMethod, setPaymentMethod] = useState('')
@@ -140,6 +125,7 @@ function SalesPage() {
   const [receiptSale, setReceiptSale] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const submitLock = useRef(false)
+  const operationId = useRef(null)
   const products = productState.products
   const sales = salesState.sales
   const query = search.trim().toLocaleLowerCase('es')
@@ -147,6 +133,25 @@ function SalesPage() {
     String(product.name ?? '').toLocaleLowerCase('es').includes(query) ||
     String(product.id ?? '').toLocaleLowerCase('es').includes(query),
   )
+  const hasHistoryFilters = Boolean(historySearch || historyStartDate || historyEndDate)
+
+  const visibleSales = useMemo(() => {
+    const historyQuery = historySearch.trim().toLocaleLowerCase('es')
+    return sales.filter((sale) => {
+      const date = localDateKey(sale.createdAt ?? sale.date)
+      const matchesDate = (!historyStartDate || date >= historyStartDate) &&
+        (!historyEndDate || date <= historyEndDate)
+      const searchableText = [
+        sale.number,
+        sale.id,
+        sale.user?.username,
+        paymentOptions.find((option) => option.id === sale.paymentMethod)?.label,
+        ...(sale.items ?? []).map((item) => item.productName),
+      ].join(' ').toLocaleLowerCase('es')
+
+      return matchesDate && (!historyQuery || searchableText.includes(historyQuery))
+    })
+  }, [historyEndDate, historySearch, historyStartDate, sales])
 
   const cartItems = useMemo(() => cart.map((entry) => {
     const product = products.find((item) => String(item.id) === String(entry.productId))
@@ -171,23 +176,32 @@ function SalesPage() {
     (paymentMethod === 'efectivo' || paymentConfirmed) && !isSubmitting
 
   useEffect(() => {
-    function refreshProducts(event) {
-      if (event.type === 'storage' && event.key && event.key !== PRODUCTS_STORAGE_KEY) return
-      setProductState(getStoredProducts())
+    let active = true
+    async function refreshData() {
+      try {
+        const [nextProducts, nextSales] = await Promise.all([
+          getProducts(),
+          getSalesRecords(),
+        ])
+        if (active) {
+          setProductState({ products: nextProducts, error: '' })
+          setSalesState({ sales: nextSales, error: '' })
+        }
+      } catch (error) {
+        if (active) {
+          setProductState((current) => ({
+            ...current,
+            error: error instanceof Error ? error.message : 'No se pudieron cargar los datos.',
+          }))
+        }
+      }
     }
-    function refreshSales(event) {
-      if (event.type === 'storage' && event.key && event.key !== SALES_STORAGE_KEY) return
-      setSalesState(getStoredSales())
-    }
-    window.addEventListener('storage', refreshProducts)
-    window.addEventListener(PRODUCTS_UPDATED_EVENT, refreshProducts)
-    window.addEventListener('storage', refreshSales)
-    window.addEventListener(SALES_UPDATED_EVENT, refreshSales)
+
+    void refreshData()
+    window.addEventListener('focus', refreshData)
     return () => {
-      window.removeEventListener('storage', refreshProducts)
-      window.removeEventListener(PRODUCTS_UPDATED_EVENT, refreshProducts)
-      window.removeEventListener('storage', refreshSales)
-      window.removeEventListener(SALES_UPDATED_EVENT, refreshSales)
+      active = false
+      window.removeEventListener('focus', refreshData)
     }
   }, [])
 
@@ -229,27 +243,57 @@ function SalesPage() {
     setPaymentConfirmed(false)
     setSaleError('')
     setActiveView('venta')
+    operationId.current = null
   }
 
-  function handleRegisterSale() {
+  function cancelPendingSale() {
+    if (isSubmitting) return
+    setCart([])
+    setDiscountInput('0')
+    setPaymentMethod('')
+    setAmountReceived('')
+    setPaymentConfirmed(false)
+    setSaleError('')
+    operationId.current = null
+  }
+
+  async function handleRegisterSale() {
     if (!canRegister || submitLock.current) return
     submitLock.current = true
     setIsSubmitting(true)
     setSaleError('')
     try {
-      const sale = registerSale({
+      if (!operationId.current) operationId.current = window.crypto.randomUUID()
+      const sale = await createSale({
         items: cart.map(({ productId, quantity }) => ({ productId, quantity })),
         discount: discountCents / 100,
         paymentMethod,
         amountReceived: amountReceived === '' ? undefined : Number(amountReceived),
         paymentConfirmed,
-        user,
-        operationId: window.crypto.randomUUID(),
+        operationId: operationId.current,
       })
-      setSalesState(getStoredSales())
-      setProductState(getStoredProducts())
+      operationId.current = null
       setReceiptSale(sale)
       setCart([])
+      try {
+        const [nextSales, nextProducts] = await Promise.all([
+          getSalesRecords(),
+          getProducts(),
+        ])
+        setSalesState({ sales: nextSales, error: '' })
+        setProductState({ products: nextProducts, error: '' })
+      } catch (refreshError) {
+        setSalesState((current) => ({
+          sales: [sale, ...current.sales.filter((item) => item.id !== sale.id)],
+          error: '',
+        }))
+        setProductState((current) => ({
+          ...current,
+          error: refreshError instanceof Error
+            ? `La venta se registró, pero no se pudo actualizar el inventario: ${refreshError.message}`
+            : 'La venta se registró, pero no se pudo actualizar el inventario.',
+        }))
+      }
     } catch (error) {
       setSaleError(error instanceof Error ? error.message : 'No se pudo registrar la venta.')
     } finally {
@@ -380,19 +424,74 @@ function SalesPage() {
             <button className="primary-button sales-register-button" disabled={!canRegister} onClick={handleRegisterSale} type="button">
               <ReceiptText size={18} aria-hidden="true" /> {isSubmitting ? 'Registrando…' : 'Registrar venta'}
             </button>
+            <button
+              className="secondary-button sales-cancel-button"
+              disabled={cartItems.length === 0 || isSubmitting}
+              onClick={cancelPendingSale}
+              type="button"
+            >
+              Cancelar venta
+            </button>
           </aside>
         </div>
       ) : (
         <section className="sales-history-panel">
           <div className="sales-section-heading">
-            <div><h2>Historial de ventas</h2><p>Operaciones registradas en este dispositivo</p></div>
-            <span>{sales.length} ventas</span>
+            <div>
+              <h2>Historial de ventas</h2>
+              <p>{isAdmin ? 'Ventas de todos los empleados' : 'Ventas asociadas a tu cuenta'}</p>
+            </div>
+            <span>{visibleSales.length} de {sales.length} ventas</span>
+          </div>
+          <div className="sales-history-filters">
+            <label className="sales-search sales-history-search">
+              <Search size={17} aria-hidden="true" />
+              <input
+                aria-label="Buscar en historial por folio, producto o cajero"
+                onChange={(event) => setHistorySearch(event.target.value)}
+                placeholder="Buscar folio, producto o cajero"
+                type="search"
+                value={historySearch}
+              />
+            </label>
+            <label className="sales-history-date-filter">
+              <span>Desde</span>
+              <input
+                aria-label="Fecha inicial del historial"
+                max={historyEndDate || undefined}
+                onChange={(event) => setHistoryStartDate(event.target.value)}
+                type="date"
+                value={historyStartDate}
+              />
+            </label>
+            <label className="sales-history-date-filter">
+              <span>Hasta</span>
+              <input
+                aria-label="Fecha final del historial"
+                min={historyStartDate || undefined}
+                onChange={(event) => setHistoryEndDate(event.target.value)}
+                type="date"
+                value={historyEndDate}
+              />
+            </label>
+            <button
+              className="secondary-button sales-history-reset"
+              disabled={!hasHistoryFilters}
+              onClick={() => {
+                setHistorySearch('')
+                setHistoryStartDate('')
+                setHistoryEndDate('')
+              }}
+              type="button"
+            >
+              Limpiar filtros
+            </button>
           </div>
           {sales.length ? (
-            <div className="products-table-wrap">
+            visibleSales.length ? <div className="products-table-wrap">
               <table className="products-table sales-history-table">
                 <thead><tr><th>Número de venta</th><th>Fecha</th><th>Atendió</th><th>Método de pago</th><th>Recibido</th><th>Cambio</th><th>Total</th><th>Comprobante</th></tr></thead>
-                <tbody>{sales.map((sale) => (
+                <tbody>{visibleSales.map((sale) => (
                   <tr key={sale.id}>
                     <td>{sale.number ?? sale.id}</td>
                     <td>{formatDateTime(sale.createdAt ?? sale.date)}</td>
@@ -406,6 +505,7 @@ function SalesPage() {
                 ))}</tbody>
               </table>
             </div>
+              : <div className="sales-empty-history"><ReceiptText size={25} aria-hidden="true" /><p>No se encontraron ventas con esos filtros.</p></div>
           ) : <div className="sales-empty-history"><ReceiptText size={25} aria-hidden="true" /><p>Aún no hay ventas registradas.</p></div>}
         </section>
       )}

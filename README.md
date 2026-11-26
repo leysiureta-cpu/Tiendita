@@ -36,10 +36,22 @@ Las versiones indicadas son las declaradas en `mi-aplicacion/package.json`; `pac
 
 ## Instalación y ejecución
 
-Requisitos: Git, Node.js y npm.
+Requisitos: Git, Node.js/npm, PHP y Composer. Laravel se encuentra en `backend/` y
+React/Vite en `mi-aplicacion/`. Configura la conexión local de MySQL en
+`backend/.env` sin subir credenciales al repositorio, y ejecuta la migración
+aditiva pendiente con `php artisan migrate` desde `backend/`. Ejecuta también
+`php artisan storage:link` para servir las fotografías de perfil.
 
 ```bash
 git clone https://github.com/leysiureta-cpu/Tiendita.git
+cd Tiendita/backend
+composer install
+php artisan serve
+```
+
+En otra terminal, inicia el frontend:
+
+```bash
 cd Tiendita/mi-aplicacion
 npm install
 npm run dev
@@ -54,40 +66,35 @@ npm run preview
 
 El proyecto también incluye `npm run lint` para ejecutar ESLint.
 
-## Backend Laravel
-
-El backend se encuentra en `backend/`, separado del frontend `mi-aplicacion/`. Requiere PHP 8.3 o posterior con `pdo_mysql`, Composer y MySQL de XAMPP con la base `mini_super` creada. Revisa las variables `DB_*` de `backend/.env` antes de usarlo; ese archivo local está excluido de Git y no debe publicarse.
-
-Desde la raíz del repositorio, entra en `backend/`, consulta el estado y aplica las migraciones pendientes y los datos de referencia:
-
-```powershell
-Set-Location backend
-php artisan migrate:status
-php artisan migrate
-php artisan db:seed
-```
-
-Los seeders pueden ejecutarse de nuevo sin duplicar roles, permisos, métodos de pago, categorías ni productos, y no reemplazan cantidades de inventario existentes. Consulta [backend/README.md](./backend/README.md) para los pasos completos. No ejecutes `migrate:fresh` ni `db:wipe`.
-
-Para generar usuarios y ventas de prueba en `local`, configura `TEST_USERS_PASSWORD` en `backend/.env` con una contraseña privada de al menos 12 caracteres y ejecuta `php artisan db:seed`. Se crean 3 usuarios con los roles existentes, 3 ventas con 3 productos cada una y detalles calculados con los precios actuales. Los seeders son repetibles y no modifican el inventario.
-
 ## Funcionalidades implementadas
 
-- **Inicio de sesión y registro:** formularios de acceso y alta de usuario, con validación de datos y confirmación de contraseña.
-- **Dashboard:** resumen de productos, existencias, ventas del día y productos más vendidos; los datos se calculan a partir de la información disponible en el navegador.
-- **Productos:** alta, consulta, búsqueda, filtro por categoría, orden alfabético, paginación, detalle, edición y eliminación.
-- **Inventario:** consulta y búsqueda de productos por nombre, categoría o identificador, con precio y existencias.
+- **Inicio de sesión y registro:** empleados se registran como Cajeros; crear una cuenta Administrador requiere un código de autorización validado únicamente por Laravel.
+- **Dashboard:** resumen de productos, existencias, ventas del día y productos más vendidos consultados desde Laravel.
+- **Productos:** consulta para ambos roles; alta, edición y eliminación protegidas para Administradores.
+- **Inventario:** consulta desde MySQL; los cambios de existencias se validan y guardan en Laravel.
 - **Punto de venta y carrito:** búsqueda y selección de productos, ajuste de cantidades y descuento, cálculo de subtotal y total, selección de efectivo/tarjeta/transferencia y validación de stock. La pantalla permite confirmar los pagos con tarjeta o transferencia, pero no procesa pagos bancarios.
-- **Ventas:** registro de ventas, actualización de existencias, historial y consulta e impresión de comprobantes.
-- **Reportes:** resumen de ventas por rango de fechas y almacenamiento de reportes para consultarlos posteriormente.
+- **Ventas:** Laravel registra cada operación y actualiza stock en una transacción. Los cajeros solo pueden consultar ventas propias; los administradores pueden consultar todas. Se conservan historial y comprobantes.
+- **Reportes:** acceso exclusivo para Administradores; se calculan en Laravel desde las ventas almacenadas.
+- **Empleados:** los Administradores buscan, consultan, registran y editan cuentas Cajero, y pueden activarlas o desactivarlas. La sección usa la tabla `usuarios`; no elimina cuentas ni sus ventas históricas.
+- **Usuarios y roles:** Administradores gestionan cuentas, asignan los roles existentes y activan/desactivan usuarios. El servidor impide cambiar el rol propio y protege también los endpoints.
 - **Perfil y preferencias:** consulta de datos de la cuenta, carga o eliminación de foto de perfil y ajustes de apariencia (tema y paleta de color).
-- **Navegación protegida:** las secciones de la aplicación requieren una sesión iniciada.
+- **Navegación protegida:** requiere sesión; React oculta secciones no autorizadas y Laravel aplica la autorización real.
 
-Los datos actuales del frontend de usuarios, productos, ventas, preferencias y reportes se guardan en el almacenamiento local (`localStorage`) del navegador; todavía no está conectado al backend Laravel separado. El carrito se mantiene durante la operación actual y no se conserva como carrito persistente.
+Los productos, usuarios, ventas y preferencias de perfil se gestionan mediante Laravel y MySQL. Tema, paleta y encuadre se guardan asociados a cada usuario; las fotografías se almacenan en el disco público de Laravel y se validan en el servidor. Las preferencias antiguas del navegador se migran al servidor al iniciar sesión, sin borrar los datos locales. Los antiguos registros de productos y ventas en `localStorage` se conservan intactos en cada navegador, pero no se importan automáticamente ni se usan para autorizar o registrar nuevas operaciones. El carrito se mantiene durante la operación actual.
+
+Configura `ADMIN_REGISTRATION_CODE` en `backend/.env` para habilitar el registro de Administradores. La variable está vacía en `backend/.env.example`; no publiques el código ni lo incluyas en el frontend. Cambia el valor local de pruebas antes de desplegar la aplicación.
+
+Como alternativa, para asignar el rol Administrador desde la consola del servidor, ejecuta desde `backend/`:
+
+```bash
+php artisan mini-super:promote-admin correo@example.com
+```
+
+El comando solo funciona desde la consola del servidor y no cambia contraseñas. Los roles Administrador y Cajero son los dos registros existentes en `roles`; no se crean roles dinámicos.
 
 ### Secciones en preparación
 
-Las rutas de categorías, clientes, proveedores, compras y caja están presentes en la navegación, pero actualmente muestran una pantalla de “Sección en preparación”. No se describen como funcionalidades terminadas.
+Clientes, proveedores, compras y caja siguen mostrando una pantalla de “Sección en preparación”.
 
 ## Estado actual del desarrollo
 

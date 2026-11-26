@@ -7,21 +7,17 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'email', 'password'])]
+#[Fillable(['nombre', 'correo', 'password', 'rol_id', 'estado', 'preferencias', 'foto_perfil'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
-    public function roles(): BelongsToMany
-    {
-        return $this->belongsToMany(Role::class)->withTimestamps();
-    }
+    protected $table = 'usuarios';
 
     /**
      * Get the attributes that should be cast.
@@ -31,8 +27,24 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'estado' => 'boolean',
+            'preferencias' => 'array',
         ];
+    }
+
+    public function rol()
+    {
+        return $this->belongsTo(Rol::class, 'rol_id');
+    }
+
+    public function ventas()
+    {
+        return $this->hasMany(Venta::class, 'usuario_id');
+    }
+
+    public function movimientosInventario()
+    {
+        return $this->hasMany(MovimientoInventario::class, 'usuario_id');
     }
 }

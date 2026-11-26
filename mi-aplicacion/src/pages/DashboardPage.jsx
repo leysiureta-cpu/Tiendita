@@ -8,55 +8,54 @@ import {
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  getDashboardMetrics,
-  PRODUCTS_UPDATED_EVENT,
-  PRODUCTS_STORAGE_KEY,
-} from '../utils/dashboardData.js'
-import { SALES_STORAGE_KEY } from '../utils/reports.js'
-import { SALES_UPDATED_EVENT } from '../utils/sales.js'
+import useAuth from '../hooks/useAuth.js'
+import { getDashboardData } from '../utils/api.js'
 
 const currencyFormatter = new Intl.NumberFormat('es-MX', {
   style: 'currency',
   currency: 'MXN',
 })
+const quantityFormatter = new Intl.NumberFormat('es-MX')
 
 function DashboardPage() {
-  const [metrics, setMetrics] = useState(getDashboardMetrics)
-  const bestSellerMax = metrics.bestSellers.reduce(
-    (max, product) => Math.max(max, product.quantity),
-    0,
-  )
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+  const [metrics, setMetrics] = useState({
+    products: null,
+    inventory: [],
+    salesToday: null,
+    revenueToday: null,
+    bestSellers: [],
+    userCount: null,
+    error: '',
+  })
 
   useEffect(() => {
-    function refreshMetrics() {
-      setMetrics(getDashboardMetrics())
-    }
-
-    function handleStorageChange(event) {
-      if (
-        !event.key ||
-        event.key === PRODUCTS_STORAGE_KEY ||
-        event.key === SALES_STORAGE_KEY ||
-        event.key === 'mini-super.users'
-      ) {
-        refreshMetrics()
+    let active = true
+    async function refreshMetrics() {
+      try {
+        const data = await getDashboardData()
+        if (active) setMetrics({ ...data, error: '' })
+      } catch (error) {
+        if (active) {
+          setMetrics((current) => ({
+            ...current,
+            error: error instanceof Error
+              ? error.message
+              : 'No se pudieron cargar los datos del panel.',
+          }))
+        }
       }
     }
 
-    window.addEventListener('storage', handleStorageChange)
-    window.addEventListener(PRODUCTS_UPDATED_EVENT, refreshMetrics)
-    window.addEventListener(SALES_UPDATED_EVENT, refreshMetrics)
+    void refreshMetrics()
     window.addEventListener('focus', refreshMetrics)
     return () => {
-      window.removeEventListener('storage', handleStorageChange)
-      window.removeEventListener(PRODUCTS_UPDATED_EVENT, refreshMetrics)
-      window.removeEventListener(SALES_UPDATED_EVENT, refreshMetrics)
+      active = false
       window.removeEventListener('focus', refreshMetrics)
     }
   }, [])
 
-  const userCountIsExample = metrics.users === 0
   const cards = [
     {
       title: 'Productos',
@@ -88,14 +87,15 @@ function DashboardPage() {
     },
     {
       title: 'Usuarios',
-      value: metrics.users === null ? '—' : userCountIsExample ? '3' : metrics.users,
-      caption: userCountIsExample ? 'Dato de ejemplo · 0 registrados' : 'Registrados',
+      value: metrics.userCount ?? '—',
+      caption: metrics.userCount === null
+          ? 'Cargando…'
+          : 'Registrados',
       icon: UsersRound,
-      path: '/perfil',
+      path: '/usuarios',
       style: 'users',
-      isExample: userCountIsExample,
     },
-  ]
+  ].filter((card) => isAdmin || !['Usuarios', 'Catálogo'].includes(card.title))
 
   return (
     <section className="dashboard-overview">
@@ -116,7 +116,7 @@ function DashboardPage() {
       )}
 
       <div className="dashboard-summary-cards">
-        {cards.map(({ title, value, caption, icon: Icon, path, style, isExample }) => {
+        {cards.map(({ title, value, caption, icon: Icon, path, style }) => {
           const content = (
             <>
               <span className={`summary-card-icon ${style}`}>
@@ -127,7 +127,7 @@ function DashboardPage() {
                 <strong className={style === 'catalog' ? 'catalog-card-value' : ''}>
                   {value}
                 </strong>
-                <span className={`summary-card-caption${isExample ? ' example' : ''}`}>
+                <span className="summary-card-caption">
                   {caption}
                 </span>
               </span>
@@ -154,66 +154,53 @@ function DashboardPage() {
           </div>
         </header>
 
-        <div className="best-sellers-content">
+        {metrics.bestSellers.length > 0 ? (
           <figure
-            aria-label="Gráfica de barras con unidades vendidas por producto, ordenadas de mayor a menor"
+            aria-label="Gráfica de barras con unidades realmente vendidas"
             className="best-sellers-chart"
           >
             <figcaption>
-              <span className="best-sellers-chart-title">
-                <BarChart3 size={17} aria-hidden="true" />
-                Unidades vendidas por producto
-              </span>
-              <span className="best-sellers-chart-count">
-                {metrics.bestSellers.length} productos
-              </span>
+              <BarChart3 size={18} aria-hidden="true" />
+              Unidades vendidas
             </figcaption>
-            {metrics.bestSellers.length > 0 ? (
-              <ol className="horizontal-bar-chart">
-                {metrics.bestSellers.map((product, index) => (
-                  <li className="horizontal-bar-row" key={product.name}>
-                    <div className="horizontal-bar-heading">
-                      <span className="horizontal-bar-rank">
-                        {String(index + 1).padStart(2, '0')}
-                      </span>
-                      <span className="horizontal-bar-label">{product.name}</span>
-                      <strong>
-                        {product.quantity}
-                        <span>unidades</span>
-                      </strong>
-                    </div>
+            <ol className="best-sellers-chart-list">
+              {metrics.bestSellers.map((product, index) => (
+                <li className="best-sellers-chart-row" key={`${product.name}-${index}`}>
+                  <div className="best-sellers-chart-label">
+                    <span className="best-sellers-chart-rank">{index + 1}</span>
+                    <span className="best-sellers-chart-name">{product.name}</span>
+                    <strong>
+                      {quantityFormatter.format(product.quantity)}
+                      <span> ud.</span>
+                    </strong>
+                  </div>
+                  <div aria-hidden="true" className="best-sellers-chart-track">
                     <span
-                      aria-label={`${product.name}: ${product.quantity} unidades vendidas`}
-                      className="horizontal-bar-track"
-                      role="img"
-                    >
-                      <span
-                        className="horizontal-bar-fill"
-                        style={{
-                          width: `${(product.quantity / bestSellerMax) * 100}%`,
-                        }}
-                      />
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <div className="best-sellers-empty" role="status">
-                <ShoppingCart size={23} strokeWidth={1.7} aria-hidden="true" />
-                <p>
-                  {metrics.error
-                    ? 'No se pudieron cargar los datos de la gráfica.'
-                    : 'Todavía no hay ventas registradas.'}
-                </p>
-                <span>
-                  {metrics.error
-                    ? 'Inténtalo de nuevo cuando los datos estén disponibles.'
-                    : 'Registra una venta para ver aquí los productos más vendidos.'}
-                </span>
-              </div>
-            )}
+                      className="best-sellers-chart-fill"
+                      style={{
+                        width: `${(product.quantity / metrics.bestSellers[0].quantity) * 100}%`,
+                      }}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ol>
           </figure>
-        </div>
+        ) : (
+          <div className="best-sellers-empty" role="status">
+            <span className="best-sellers-empty-icon">
+              <BarChart3 size={23} aria-hidden="true" />
+            </span>
+            <div>
+              <strong>{metrics.error ? 'No se pudieron cargar las ventas' : 'Todavía no hay ventas'}</strong>
+              <p>
+                {metrics.error
+                  ? 'Consulta el aviso del panel para conocer el problema.'
+                  : 'Los productos aparecerán aquí cuando registres ventas.'}
+              </p>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="best-sellers-panel dashboard-inventory-panel">

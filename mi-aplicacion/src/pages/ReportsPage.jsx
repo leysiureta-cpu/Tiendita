@@ -1,15 +1,10 @@
 import { CalendarDays, FilePlus2, FileText } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
-  buildSalesSummary,
   getSavedReports,
-  getSales,
-  REPORTS_STORAGE_KEY,
-  REPORTS_UPDATED_EVENT,
-  SALES_STORAGE_KEY,
   saveSalesReport,
 } from '../utils/reports.js'
-import { SALES_UPDATED_EVENT } from '../utils/sales.js'
+import { getSalesReport } from '../utils/api.js'
 
 const currencyFormatter = new Intl.NumberFormat('es-MX', {
   style: 'currency',
@@ -30,20 +25,6 @@ function getInitialSavedReports() {
   }
 }
 
-function getInitialSales() {
-  try {
-    return { sales: getSales(), error: '' }
-  } catch (error) {
-    return {
-      sales: [],
-      error:
-        error instanceof Error
-          ? error.message
-          : 'No se pudieron consultar las ventas.',
-    }
-  }
-}
-
 function formatDate(date) {
   if (!date) return '—'
   return new Intl.DateTimeFormat('es-MX', {
@@ -55,53 +36,19 @@ function formatDate(date) {
 }
 
 function ReportsPage() {
-  const [salesState, setSalesState] = useState(getInitialSales)
   const [savedState, setSavedState] = useState(getInitialSavedReports)
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [selectedReport, setSelectedReport] = useState(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const salesError = salesState.error
 
   const currentSummary = useMemo(
     () => selectedReport?.summary ?? null,
     [selectedReport],
   )
 
-  useEffect(() => {
-    function refreshStoredData(event) {
-      if (event.type === 'storage' && event.key && event.key !== SALES_STORAGE_KEY) {
-        if (event.key !== REPORTS_STORAGE_KEY) return
-      }
-
-      if (
-        event.type === REPORTS_UPDATED_EVENT ||
-        event.key === REPORTS_STORAGE_KEY ||
-        event.key === null
-      ) {
-        setSavedState(getInitialSavedReports())
-      }
-      if (
-        event.type === SALES_UPDATED_EVENT ||
-        (event.type !== REPORTS_UPDATED_EVENT &&
-          (event.key === SALES_STORAGE_KEY || event.key === null))
-      ) {
-        setSalesState(getInitialSales())
-      }
-    }
-
-    window.addEventListener('storage', refreshStoredData)
-    window.addEventListener(SALES_UPDATED_EVENT, refreshStoredData)
-    window.addEventListener(REPORTS_UPDATED_EVENT, refreshStoredData)
-    return () => {
-      window.removeEventListener('storage', refreshStoredData)
-      window.removeEventListener(SALES_UPDATED_EVENT, refreshStoredData)
-      window.removeEventListener(REPORTS_UPDATED_EVENT, refreshStoredData)
-    }
-  }, [])
-
-  function handleGenerate(event) {
+  async function handleGenerate(event) {
     event.preventDefault()
     setError('')
     setNotice('')
@@ -116,29 +63,16 @@ function ReportsPage() {
       return
     }
 
-    let currentSales
     try {
-      currentSales = getSales()
-      setSalesState({ sales: currentSales, error: '' })
-    } catch (salesLoadError) {
-      setError(
-        salesLoadError instanceof Error
-          ? salesLoadError.message
-          : 'No se pudieron consultar las ventas.',
-      )
-      return
-    }
-
-    const report = {
-      id: window.crypto.randomUUID(),
-      type: 'sales',
-      startDate,
-      endDate,
-      summary: buildSalesSummary(currentSales, startDate, endDate),
-      savedAt: new Date().toISOString(),
-    }
-
-    try {
+      const { summary } = await getSalesReport(startDate, endDate)
+      const report = {
+        id: window.crypto.randomUUID(),
+        type: 'sales',
+        startDate,
+        endDate,
+        summary,
+        savedAt: new Date().toISOString(),
+      }
       setSavedState({ reports: saveSalesReport(report), error: '' })
       setSelectedReport(report)
       setNotice('El reporte se guardó correctamente para futuras consultas.')
@@ -219,9 +153,9 @@ function ReportsPage() {
         </button>
       </form>
 
-      {(error || savedState.error || salesError) && (
+      {(error || savedState.error) && (
         <p className="products-feedback error-message" role="alert">
-          {error || savedState.error || salesError}
+          {error || savedState.error}
         </p>
       )}
       {notice && (

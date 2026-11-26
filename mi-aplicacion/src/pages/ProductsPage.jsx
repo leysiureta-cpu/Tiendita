@@ -10,33 +10,20 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import useAuth from '../hooks/useAuth.js'
 import ProductDialog from '../components/ProductDialog.jsx'
 import {
+  deleteProduct,
+  getCategories,
   getProducts,
-  PRODUCTS_STORAGE_KEY,
-  PRODUCTS_UPDATED_EVENT,
-  saveProducts,
-} from '../utils/dashboardData.js'
+  updateProduct,
+} from '../utils/api.js'
 
 const PAGE_SIZE = 8
 const currencyFormatter = new Intl.NumberFormat('es-MX', {
   style: 'currency',
   currency: 'MXN',
 })
-
-function readProducts() {
-  try {
-    return { products: getProducts(), error: '' }
-  } catch (error) {
-    return {
-      products: [],
-      error:
-        error instanceof Error
-          ? error.message
-          : 'No se pudieron cargar los productos.',
-    }
-  }
-}
 
 function productCategory(product) {
   return String(product.category ?? 'Sin categoría')
@@ -48,7 +35,11 @@ function productPrice(price) {
 }
 
 function ProductsPage() {
-  const [productState, setProductState] = useState(readProducts)
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+  const [productState, setProductState] = useState({ products: [], error: '' })
+  const [categoryOptions, setCategoryOptions] = useState([])
+  const [categoryError, setCategoryError] = useState('')
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('')
   const [sortOrder, setSortOrder] = useState('asc')
@@ -60,31 +51,64 @@ function ProductsPage() {
   const { products, error: loadError } = productState
 
   useEffect(() => {
-    function refreshProducts(event) {
-      if (
-        event.type === 'storage' &&
-        event.key &&
-        event.key !== PRODUCTS_STORAGE_KEY
-      ) {
-        return
+    let active = true
+    async function refreshProducts() {
+      try {
+        const nextProducts = await getProducts()
+        if (active) setProductState({ products: nextProducts, error: '' })
+      } catch (error) {
+        if (active) {
+          setProductState({
+            products: [],
+            error: error instanceof Error
+              ? error.message
+              : 'No se pudieron cargar los productos.',
+          })
+        }
       }
-      setProductState(readProducts())
     }
 
-    window.addEventListener('storage', refreshProducts)
-    window.addEventListener(PRODUCTS_UPDATED_EVENT, refreshProducts)
+    void refreshProducts()
+    window.addEventListener('focus', refreshProducts)
     return () => {
-      window.removeEventListener('storage', refreshProducts)
-      window.removeEventListener(PRODUCTS_UPDATED_EVENT, refreshProducts)
+      active = false
+      window.removeEventListener('focus', refreshProducts)
+    }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    getCategories()
+      .then((items) => {
+        if (
+          !Array.isArray(items) ||
+          items.some((item) => !item || typeof item.name !== 'string')
+        ) {
+          throw new Error('El servidor devolvió una lista de categorías no válida.')
+        }
+        if (active) setCategoryOptions(items.map((item) => item.name))
+      })
+      .catch((error) => {
+        if (active) {
+          setCategoryError(error instanceof Error
+            ? error.message
+            : 'No se pudieron cargar las categorías.')
+        }
+      })
+
+    return () => {
+      active = false
     }
   }, [])
 
   const categories = useMemo(
-    () =>
-      [...new Set(products.map(productCategory))].sort((a, b) =>
-        a.localeCompare(b, 'es', { sensitivity: 'base' }),
-      ),
-    [products],
+    () => [...new Set([
+      ...categoryOptions,
+      ...products.map(productCategory),
+    ])].sort((a, b) =>
+      a.localeCompare(b, 'es', { sensitivity: 'base' }),
+    ),
+    [categoryOptions, products],
   )
 
   const filteredProducts = useMemo(() => {
@@ -125,33 +149,30 @@ function ProductsPage() {
     setActionError('')
   }
 
-  function handleSave(updatedProduct) {
+  async function handleSave(updatedProduct) {
+    const savedProduct = await updateProduct(updatedProduct.id, {
+      name: updatedProduct.name,
+      categoryId: updatedProduct.categoryId,
+      price: updatedProduct.price,
+      stock: updatedProduct.stock,
+    })
     const nextProducts = products.map((product) =>
-      String(product.id) === String(updatedProduct.id) ? updatedProduct : product,
+      String(product.id) === String(savedProduct.id) ? savedProduct : product,
     )
-    if (!nextProducts.some((product) => product === updatedProduct)) {
-      throw new Error('No se encontró el producto que deseas actualizar.')
-    }
-    saveProducts(nextProducts)
     setProductState({ products: nextProducts, error: '' })
     setEditingProduct(null)
     setNotice('Los cambios del producto se guardaron correctamente.')
     setActionError('')
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!deletingProduct) return
 
-    const nextProducts = products.filter(
-      (product) => String(product.id) !== String(deletingProduct.id),
-    )
-    if (nextProducts.length === products.length) {
-      setActionError('No se encontró el producto que deseas eliminar.')
-      return
-    }
-
     try {
-      saveProducts(nextProducts)
+      await deleteProduct(deletingProduct.id)
+      const nextProducts = products.filter(
+        (product) => String(product.id) !== String(deletingProduct.id),
+      )
       setProductState({ products: nextProducts, error: '' })
       setDeletingProduct(null)
       setNotice('El producto se eliminó correctamente.')
@@ -172,10 +193,12 @@ function ProductsPage() {
           <p className="products-eyebrow">CATÁLOGO DE INVENTARIO</p>
           <h1>Consultar productos</h1>
         </div>
-        <Link className="primary-button products-add-button" to="/registrar-producto">
-          <Plus size={18} aria-hidden="true" />
-          Registrar producto
-        </Link>
+        {isAdmin && (
+          <Link className="primary-button products-add-button" to="/registrar-producto">
+            <Plus size={18} aria-hidden="true" />
+            Registrar producto
+          </Link>
+        )}
       </header>
 
       <div className="products-toolbar">
@@ -226,9 +249,9 @@ function ProductsPage() {
         </label>
       </div>
 
-      {(loadError || actionError) && (
+      {(loadError || categoryError || actionError) && (
         <p className="products-feedback error-message" role="alert">
-          {loadError || actionError}
+          {loadError || categoryError || actionError}
         </p>
       )}
       {notice && (
@@ -244,10 +267,12 @@ function ProductsPage() {
           </span>
           <h2>El inventario está vacío</h2>
           <p>Los productos registrados aparecerán aquí.</p>
-          <Link className="primary-button" to="/registrar-producto">
-            <Plus size={18} aria-hidden="true" />
-            Registrar producto
-          </Link>
+          {isAdmin && (
+            <Link className="primary-button" to="/registrar-producto">
+              <Plus size={18} aria-hidden="true" />
+              Registrar producto
+            </Link>
+          )}
         </div>
       ) : filteredProducts.length === 0 && !loadError ? (
         <div className="products-empty-state filtered-empty-state">
@@ -292,26 +317,30 @@ function ProductsPage() {
                         >
                           <Eye size={17} aria-hidden="true" />
                         </Link>
-                        <button
-                          aria-label={`Editar ${product.name}`}
-                          className="product-icon-button"
-                          onClick={() => setEditingProduct(product)}
-                          type="button"
-                        >
-                          <Pencil size={17} aria-hidden="true" />
-                        </button>
-                        <button
-                          aria-label={`Eliminar ${product.name}`}
-                          className="product-icon-button delete"
-                          onClick={() => {
-                            setDeletingProduct(product)
-                            setActionError('')
-                            setNotice('')
-                          }}
-                          type="button"
-                        >
-                          <Trash2 size={17} aria-hidden="true" />
-                        </button>
+                        {isAdmin && (
+                          <>
+                            <button
+                              aria-label={`Editar ${product.name}`}
+                              className="product-icon-button"
+                              onClick={() => setEditingProduct(product)}
+                              type="button"
+                            >
+                              <Pencil size={17} aria-hidden="true" />
+                            </button>
+                            <button
+                              aria-label={`Eliminar ${product.name}`}
+                              className="product-icon-button delete"
+                              onClick={() => {
+                                setDeletingProduct(product)
+                                setActionError('')
+                                setNotice('')
+                              }}
+                              type="button"
+                            >
+                              <Trash2 size={17} aria-hidden="true" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

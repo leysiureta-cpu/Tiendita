@@ -20,6 +20,8 @@ import LoginPage from './pages/LoginPage.jsx'
 import MainMenuPage from './pages/MainMenuPage.jsx'
 import ProductDetailsPage from './pages/ProductDetailsPage.jsx'
 import ProductsPage from './pages/ProductsPage.jsx'
+import CategoriesPage from './pages/CategoriesPage.jsx'
+import EmployeesPage from './pages/EmployeesPage.jsx'
 import ProfilePage from './pages/ProfilePage.jsx'
 import RegisterPage from './pages/RegisterPage.jsx'
 import RegisterProductPage from './pages/RegisterProductPage.jsx'
@@ -27,8 +29,9 @@ import ReportsPage from './pages/ReportsPage.jsx'
 import SalesPage from './pages/SalesPage.jsx'
 import SettingsPage from './pages/SettingsPage.jsx'
 import SectionPlaceholder from './pages/SectionPlaceholder.jsx'
+import UsersPage from './pages/UsersPage.jsx'
 import WelcomePage from './pages/WelcomePage.jsx'
-import { isAdmin } from './utils/auth.js'
+import { getRoleLabel } from './utils/auth.js'
 import sections from './utils/sections.js'
 import './App.css'
 
@@ -46,7 +49,15 @@ const additionalSections = sections.filter(
 )
 
 function SectionApp() {
-  const { logout, user } = useAuth()
+  const { authError, logout, user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+  const visibleMainNavigation = mainNavigation.filter(
+    ({ path }) => path !== '/reportes' || isAdmin,
+  )
+  const visibleAdditionalSections = additionalSections.filter(({ path }) => {
+    if (['/categorias', '/usuarios', '/empleados'].includes(path)) return isAdmin
+    return true
+  })
 
   return (
     <div className="app-shell">
@@ -61,7 +72,7 @@ function SectionApp() {
 
         <nav className="main-navigation" aria-label="Secciones principales">
           <span className="navigation-label">MENÚ PRINCIPAL</span>
-          {mainNavigation.map(({ path, label, icon: Icon }) => (
+          {visibleMainNavigation.map(({ path, label, icon: Icon }) => (
             <NavLink
               className={({ isActive }) =>
                 `navigation-link${isActive ? ' active' : ''}`
@@ -87,7 +98,7 @@ function SectionApp() {
           <span className="navigation-label additional-navigation-label">
             OTRAS SECCIONES
           </span>
-          {additionalSections.map(({ path, label, icon: Icon }) => (
+          {visibleAdditionalSections.map(({ path, label, icon: Icon }) => (
             <NavLink
               className={({ isActive }) =>
                 `navigation-link${isActive ? ' active' : ''}`
@@ -100,16 +111,18 @@ function SectionApp() {
               <span>{label}</span>
             </NavLink>
           ))}
-          <NavLink
-            className={({ isActive }) =>
-              `navigation-link${isActive ? ' active' : ''}`
-            }
-            aria-label="Registrar producto"
-            to="/registrar-producto"
-          >
-            <PackagePlus size={19} strokeWidth={1.8} aria-hidden="true" />
-            <span>Registrar producto</span>
-          </NavLink>
+          {isAdmin && (
+            <NavLink
+              className={({ isActive }) =>
+                `navigation-link${isActive ? ' active' : ''}`
+              }
+              aria-label="Registrar producto"
+              to="/registrar-producto"
+            >
+              <PackagePlus size={19} strokeWidth={1.8} aria-hidden="true" />
+              <span>Registrar producto</span>
+            </NavLink>
+          )}
         </nav>
 
         <div className="sidebar-account">
@@ -121,11 +134,14 @@ function SectionApp() {
             />
             <strong>{user.username}</strong>
           </div>
-          <span>{isAdmin(user) ? 'Administrador' : 'Usuario'}</span>
+          <span>{getRoleLabel(user)}</span>
           <Link
             aria-label="Cerrar sesión"
             className="sidebar-logout"
-            onClick={logout}
+            onClick={(event) => {
+              event.preventDefault()
+              void logout()
+            }}
             to="/login"
           >
             <LogOut size={18} aria-hidden="true" />
@@ -135,6 +151,7 @@ function SectionApp() {
       </aside>
 
       <main className="main-content dashboard-main-content">
+        {authError && <p className="auth-message error-message" role="alert">{authError}</p>}
         <header className="dashboard-topbar">
           <Link
             aria-label="Buscar productos"
@@ -160,9 +177,12 @@ function SectionApp() {
           <Route element={<InventoryPage />} path="/inventario" />
           <Route element={<ProductDetailsPage />} path="/productos/:productId" />
           <Route element={<ProductsPage />} path="/productos" />
-          <Route element={<RegisterProductPage />} path="/registrar-producto" />
+          <Route element={<AdminRoute><RegisterProductPage /></AdminRoute>} path="/registrar-producto" />
           <Route element={<ProfilePage />} path="/perfil" />
-          <Route element={<ReportsPage />} path="/reportes" />
+          <Route element={<AdminRoute><ReportsPage /></AdminRoute>} path="/reportes" />
+          <Route element={<AdminRoute><CategoriesPage /></AdminRoute>} path="/categorias" />
+          <Route element={<AdminRoute><UsersPage /></AdminRoute>} path="/usuarios" />
+          <Route element={<AdminRoute><EmployeesPage /></AdminRoute>} path="/empleados" />
           <Route element={<SalesPage />} path="/ventas" />
           <Route element={<SettingsPage />} path="/configuracion" />
           {sections
@@ -172,7 +192,10 @@ function SectionApp() {
                 section.path !== '/reportes' &&
                 section.path !== '/inventario' &&
                 section.path !== '/ventas' &&
-                section.path !== '/configuracion',
+                section.path !== '/configuracion' &&
+                section.path !== '/categorias' &&
+                section.path !== '/usuarios' &&
+                section.path !== '/empleados',
             )
             .map((section) => (
             <Route
@@ -189,17 +212,25 @@ function SectionApp() {
 }
 
 function ProtectedSectionApp() {
-  const { user } = useAuth()
+  const { authLoading, user } = useAuth()
+  if (authLoading) return null
   return user ? <SectionApp /> : <Navigate to="/login" replace />
 }
 
-function ProtectedMenuPage() {
+function AdminRoute({ children }) {
   const { user } = useAuth()
+  return user?.role === 'admin' ? children : <Navigate to="/dashboard" replace />
+}
+
+function ProtectedMenuPage() {
+  const { authLoading, user } = useAuth()
+  if (authLoading) return null
   return user ? <MainMenuPage /> : <Navigate to="/login" replace />
 }
 
 function WelcomeRoute() {
-  const { user } = useAuth()
+  const { authLoading, user } = useAuth()
+  if (authLoading) return null
   return user ? <Navigate to="/menu" replace /> : <WelcomePage />
 }
 

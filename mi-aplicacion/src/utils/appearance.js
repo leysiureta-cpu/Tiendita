@@ -23,17 +23,17 @@ export function applyAppearance(preferences) {
   root.dataset.theme = isDark ? 'dark' : 'light'
   root.dataset.themeChoice = themeChoice
   root.dataset.palette = palette.id
-  root.style.setProperty('--color-primary', isDark ? palette.darkAccent : palette.primary)
+  const primaryColor = isDark ? palette.darkAccent : palette.primary
+  const primaryButtonColor = isDark ? palette.dark : palette.primary
+  root.style.setProperty('--color-primary', primaryColor)
+  root.style.setProperty('--color-primary-button', primaryButtonColor)
   root.style.setProperty('--color-primary-dark', palette.dark)
-  root.style.setProperty(
-    '--color-primary-hover',
-    isDark
-      ? `color-mix(in srgb, ${palette.darkAccent} 88%, white)`
-      : palette.dark,
-  )
-  root.style.setProperty('--color-on-primary', isDark ? '#111419' : '#fff')
+  root.style.setProperty('--color-primary-mid', isDark ? palette.darkAccent : palette.swatches[1])
+  root.style.setProperty('--color-primary-border', `color-mix(in srgb, ${primaryColor} 28%, var(--color-border))`)
+  root.style.setProperty('--color-primary-shadow', `color-mix(in srgb, ${primaryColor} 12%, transparent)`)
+  root.style.setProperty('--color-focus-ring', `color-mix(in srgb, ${primaryColor} 38%, transparent)`)
   const softColor = isDark
-    ? `color-mix(in srgb, ${palette.darkAccent} 20%, #1b2028)`
+    ? `color-mix(in srgb, ${palette.primary} 24%, #1b2028)`
     : palette.soft
   root.style.setProperty('--color-secondary', softColor)
   root.style.setProperty('--color-accent-soft', softColor)

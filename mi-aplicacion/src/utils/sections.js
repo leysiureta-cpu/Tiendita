@@ -16,6 +16,8 @@ const sections = [
   { path: '/productos', label: 'Productos', icon: Package },
   { path: '/inventario', label: 'Inventario', icon: Boxes },
   { path: '/categorias', label: 'Categorías', icon: Tags },
+  { path: '/usuarios', label: 'Usuarios', icon: Users },
+  { path: '/empleados', label: 'Empleados', icon: Users },
   { path: '/clientes', label: 'Clientes', icon: Users },
   { path: '/proveedores', label: 'Proveedores', icon: Truck },
   { path: '/compras', label: 'Compras', icon: ShoppingBag },

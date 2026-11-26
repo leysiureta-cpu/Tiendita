@@ -15,16 +15,21 @@ function SettingsPage() {
   const { updatePreferences, user } = useAuth()
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
   const preferences = user.preferences ?? { theme: 'light', palette: 'red' }
 
-  function savePreference(update, successMessage) {
+  async function savePreference(update, successMessage) {
+    if (isSaving) return
+    setIsSaving(true)
     try {
-      updatePreferences(update)
+      await updatePreferences(update)
       setNotice(successMessage)
       setError('')
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'No se pudo guardar la preferencia.')
       setNotice('')
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -85,8 +90,9 @@ function SettingsPage() {
             <button
               aria-pressed={preferences.theme === id}
               className={`theme-choice${preferences.theme === id ? ' selected' : ''}`}
+              disabled={isSaving}
               key={id}
-              onClick={() => savePreference({ theme: id }, `Modo ${name.toLowerCase()} guardado.`)}
+              onClick={() => void savePreference({ theme: id }, `Modo ${name.toLowerCase()} guardado.`)}
               type="button"
             >
               <span className="theme-choice-icon"><Icon size={20} aria-hidden="true" /></span>
@@ -110,8 +116,9 @@ function SettingsPage() {
             <button
               aria-pressed={preferences.palette === palette.id}
               className={`palette-choice${preferences.palette === palette.id ? ' selected' : ''}`}
+              disabled={isSaving}
               key={palette.id}
-              onClick={() => savePreference({ palette: palette.id }, `Paleta ${palette.name.toLowerCase()} aplicada.`)}
+              onClick={() => void savePreference({ palette: palette.id }, `Paleta ${palette.name.toLowerCase()} aplicada.`)}
               style={{ '--palette-preview': palette.primary, '--palette-soft': palette.soft }}
               type="button"
             >
@@ -138,7 +145,7 @@ function SettingsPage() {
             <p>Vuelve al tema claro y a la paleta roja original. La foto y tus datos personales no cambian.</p>
           </div>
         </header>
-        <button className="secondary-button settings-reset-button" onClick={resetAppearance} type="button">
+        <button className="secondary-button settings-reset-button" disabled={isSaving} onClick={resetAppearance} type="button">
           <RotateCcw size={17} aria-hidden="true" /> Restablecer apariencia
         </button>
       </section>

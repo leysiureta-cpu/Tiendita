@@ -15,6 +15,8 @@ return [
 
     'name' => env('APP_NAME', 'Laravel'),
 
+    'admin_registration_code' => env('ADMIN_REGISTRATION_CODE'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Environment
@@ -40,8 +42,6 @@ return [
     */
 
     'debug' => (bool) env('APP_DEBUG', false),
-
-    'test_users_password' => env('TEST_USERS_PASSWORD'),
 
     /*
     |--------------------------------------------------------------------------

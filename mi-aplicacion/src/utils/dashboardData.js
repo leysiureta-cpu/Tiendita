@@ -1,4 +1,3 @@
-import { getRegisteredUserCount } from './auth.js'
 import { getSales } from './reports.js'
 
 export const PRODUCTS_STORAGE_KEY = 'mini-super.products'
@@ -92,7 +91,19 @@ export function getDashboardMetrics() {
     const bestSellers = new Map()
 
     for (const sale of sales) {
-      for (const item of sale.items ?? sale.products ?? sale.lines ?? []) {
+      if (!sale || typeof sale !== 'object') continue
+      const saleItems = Array.isArray(sale.items)
+        ? sale.items
+        : Array.isArray(sale.products)
+          ? sale.products
+          : Array.isArray(sale.lines)
+            ? sale.lines
+            : sale.productName || sale.name || sale.product?.name
+              ? [sale]
+              : []
+
+      for (const item of saleItems) {
+        if (!item || typeof item !== 'object') continue
         const name = String(item.productName ?? item.name ?? item.product?.name ?? '').trim()
         const quantity = Number(item.quantity ?? item.qty)
         if (!name || !Number.isFinite(quantity) || quantity <= 0) continue
@@ -103,19 +114,19 @@ export function getDashboardMetrics() {
     return {
       products: inventory.length,
       inventory,
-      users: getRegisteredUserCount(),
       salesToday: salesToday.length,
       revenueToday: salesToday.reduce((sum, sale) => sum + (Number(sale.total) || 0), 0),
       bestSellers: [...bestSellers.entries()]
         .map(([name, quantity]) => ({ name, quantity }))
-        .sort((a, b) => b.quantity - a.quantity),
+        .sort((a, b) =>
+          b.quantity - a.quantity || a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }),
+        ),
       error: '',
     }
   } catch (error) {
     return {
       products: null,
       inventory: [],
-      users: null,
       salesToday: null,
       revenueToday: null,
       bestSellers: [],

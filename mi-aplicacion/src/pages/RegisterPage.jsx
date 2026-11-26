@@ -1,4 +1,4 @@
-import { LockKeyhole, Mail, UserRound } from 'lucide-react'
+import { LockKeyhole, Mail, ShieldCheck, UserRound } from 'lucide-react'
 import { useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import AuthInput from '../components/AuthInput.jsx'
@@ -6,18 +6,22 @@ import MiniSuperLogo from '../components/MiniSuperLogo.jsx'
 import useAuth from '../hooks/useAuth.js'
 
 const emptyForm = {
+  accountType: 'employee',
   username: '',
   email: '',
   password: '',
   confirmPassword: '',
+  adminRegistrationCode: '',
 }
 
 function RegisterPage() {
-  const { register, user } = useAuth()
+  const { authError, authLoading, register, user } = useAuth()
   const [form, setForm] = useState(emptyForm)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  if (authLoading) return null
 
   if (user) {
     return <Navigate to="/menu" replace />
@@ -25,7 +29,13 @@ function RegisterPage() {
 
   function handleChange(event) {
     const { name, value } = event.target
-    setForm((current) => ({ ...current, [name]: value }))
+    setForm((current) => ({
+      ...current,
+      [name]: value,
+      ...(name === 'accountType' && value !== 'administrator'
+        ? { adminRegistrationCode: '' }
+        : {}),
+    }))
     setError('')
     setSuccess('')
   }
@@ -65,6 +75,37 @@ function RegisterPage() {
         </div>
         <h1>Registro de usuario</h1>
         <form className="auth-form" onSubmit={handleSubmit}>
+          <fieldset className="account-type-selector">
+            <legend>¿Qué tipo de cuenta deseas crear?</legend>
+            <div className="account-type-options">
+              <label className={form.accountType === 'employee' ? 'selected' : ''}>
+                <input
+                  checked={form.accountType === 'employee'}
+                  name="accountType"
+                  onChange={handleChange}
+                  type="radio"
+                  value="employee"
+                />
+                <span>
+                  <strong>Empleado</strong>
+                  <small>Acceso de cajero</small>
+                </span>
+              </label>
+              <label className={form.accountType === 'administrator' ? 'selected' : ''}>
+                <input
+                  checked={form.accountType === 'administrator'}
+                  name="accountType"
+                  onChange={handleChange}
+                  type="radio"
+                  value="administrator"
+                />
+                <span>
+                  <strong>Administrador</strong>
+                  <small>Requiere código de autorización</small>
+                </span>
+              </label>
+            </div>
+          </fieldset>
           <AuthInput
             autoComplete="name"
             icon={UserRound}
@@ -100,9 +141,20 @@ function RegisterPage() {
             type="password"
             value={form.confirmPassword}
           />
-          {error && (
+          {form.accountType === 'administrator' && (
+            <AuthInput
+              autoComplete="off"
+              icon={ShieldCheck}
+              label="Código de autorización"
+              name="adminRegistrationCode"
+              onChange={handleChange}
+              type="password"
+              value={form.adminRegistrationCode}
+            />
+          )}
+          {(error || authError) && (
             <p className="auth-message error-message" role="alert">
-              {error}
+              {error || authError}
             </p>
           )}
           {success && (
@@ -111,7 +163,7 @@ function RegisterPage() {
             </p>
           )}
           <button className="auth-submit-button" disabled={isSubmitting} type="submit">
-            {isSubmitting ? 'Guardando…' : 'Entrar'}
+            {isSubmitting ? 'Guardando…' : 'Crear cuenta'}
           </button>
         </form>
         <p className="auth-switch">

@@ -26,6 +26,7 @@ const menuActions = [
 
 function MainMenuPage() {
   const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   function closeMenu() {
@@ -79,15 +80,19 @@ function MainMenuPage() {
               <Home size={18} aria-hidden="true" />
               Panel de control
             </NavLink>
-            <NavLink
-              className="dashboard-nav-link"
-              onClick={closeMenu}
-              to="/registrar-producto"
-            >
-              <PackagePlus size={18} aria-hidden="true" />
-              Registrar producto
-            </NavLink>
-            {sections.map(({ path, label, icon: Icon }) => (
+            {isAdmin && (
+              <NavLink
+                className="dashboard-nav-link"
+                onClick={closeMenu}
+                to="/registrar-producto"
+              >
+                <PackagePlus size={18} aria-hidden="true" />
+                Registrar producto
+              </NavLink>
+            )}
+            {sections.filter(({ path }) => (
+              isAdmin || !['/categorias', '/reportes', '/usuarios', '/empleados'].includes(path)
+            )).map(({ path, label, icon: Icon }) => (
               <NavLink
                 className="dashboard-nav-link"
                 key={path}
@@ -119,12 +124,14 @@ function MainMenuPage() {
         </div>
 
         <nav aria-label="Acciones principales" className="dashboard-actions">
-          {menuActions.map(({ path, label, icon: Icon }) => (
+          {menuActions
+            .filter(({ path }) => isAdmin || path !== '/registrar-producto' && path !== '/reportes')
+            .map(({ path, label, icon: Icon }) => (
             <Link className="dashboard-action" key={path} to={path}>
               <Icon size={31} strokeWidth={1.8} aria-hidden="true" />
               <span>{label}</span>
             </Link>
-          ))}
+            ))}
         </nav>
       </section>
     </main>

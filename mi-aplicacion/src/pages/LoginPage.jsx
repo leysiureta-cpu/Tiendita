@@ -6,7 +6,7 @@ import MiniSuperLogo from '../components/MiniSuperLogo.jsx'
 import useAuth from '../hooks/useAuth.js'
 
 function LoginPage() {
-  const { login, user } = useAuth()
+  const { authError, authLoading, login, user } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [form, setForm] = useState({ email: '', password: '' })
@@ -14,6 +14,8 @@ function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const notice =
     typeof location.state?.notice === 'string' ? location.state.notice : ''
+
+  if (authLoading) return null
 
   if (user) {
     return <Navigate to="/menu" replace />
@@ -70,9 +72,9 @@ function LoginPage() {
             type="password"
             value={form.password}
           />
-          {error && (
+          {(error || authError) && (
             <p className="auth-message error-message" role="alert">
-              {error}
+              {error || authError}
             </p>
           )}
           <button className="auth-submit-button" disabled={isSubmitting} type="submit">
