@@ -1,5 +1,6 @@
 import {
   Eye,
+  KeyRound,
   Pencil,
   Plus,
   Search,
@@ -13,6 +14,7 @@ import {
   createEmployee,
   getEmployee,
   getEmployees,
+  resetEmployeePassword,
   updateEmployee,
 } from '../utils/api.js'
 
@@ -50,6 +52,9 @@ function EmployeesPage() {
   const detailsRequest = useRef(0)
   const [savingEmployeeId, setSavingEmployeeId] = useState(null)
   const [savingForm, setSavingForm] = useState(false)
+  const [passwordResetState, setPasswordResetState] = useState(null)
+  const [passwordResetError, setPasswordResetError] = useState('')
+  const [savingPassword, setSavingPassword] = useState(false)
   const [actionError, setActionError] = useState('')
   const [notice, setNotice] = useState('')
 
@@ -94,6 +99,16 @@ function EmployeesPage() {
     setActionError('')
   }
 
+  function openPasswordReset(employee) {
+    setPasswordResetState({
+      employee,
+      password: '',
+      password_confirmation: '',
+    })
+    setPasswordResetError('')
+    setActionError('')
+  }
+
   function handleFormChange(event) {
     const { name, value } = event.target
     setFormState((current) => ({
@@ -114,12 +129,9 @@ function EmployeesPage() {
       name: form.name.trim(),
       email: form.email.trim(),
     }
-    if (form.password) {
+    if (!employee) {
       details.password = form.password
       details.password_confirmation = form.password_confirmation
-    } else if (!employee) {
-      setFormError('Define una contraseña de al menos 8 caracteres.')
-      return
     }
 
     setSavingForm(true)
@@ -139,6 +151,28 @@ function EmployeesPage() {
         : 'No se pudo guardar el empleado.')
     } finally {
       setSavingForm(false)
+    }
+  }
+
+  async function handlePasswordResetSubmit(event) {
+    event.preventDefault()
+    if (!passwordResetState || savingPassword) return
+
+    setPasswordResetError('')
+    setSavingPassword(true)
+    try {
+      await resetEmployeePassword(passwordResetState.employee.id, {
+        password: passwordResetState.password,
+        password_confirmation: passwordResetState.password_confirmation,
+      })
+      setNotice(`Se restableció la contraseña de ${passwordResetState.employee.name}.`)
+      setPasswordResetState(null)
+    } catch (error) {
+      setPasswordResetError(error instanceof Error
+        ? error.message
+        : 'No se pudo restablecer la contraseña.')
+    } finally {
+      setSavingPassword(false)
     }
   }
 
@@ -278,6 +312,14 @@ function EmployeesPage() {
                         <Pencil size={17} aria-hidden="true" />
                       </button>
                       <button
+                        aria-label={`Restablecer contraseña de ${employee.name}`}
+                        className="product-icon-button"
+                        onClick={() => openPasswordReset(employee)}
+                        type="button"
+                      >
+                        <KeyRound size={17} aria-hidden="true" />
+                      </button>
+                      <button
                         aria-label={`${employee.active ? 'Desactivar' : 'Activar'} ${employee.name}`}
                         className="product-icon-button"
                         disabled={savingEmployeeId !== null}
@@ -352,31 +394,33 @@ function EmployeesPage() {
                   value={formState.form.email}
                 />
               </label>
-              <label>
-                <span>{formState.employee ? 'Nueva contraseña (opcional)' : 'Contraseña'}</span>
-                <input
-                  autoComplete="new-password"
-                  minLength={8}
-                  name="password"
-                  onChange={handleFormChange}
-                  required={!formState.employee}
-                  type="password"
-                  value={formState.form.password}
-                />
-              </label>
-              {formState.form.password && (
-                <label>
-                  <span>Confirmar contraseña</span>
-                  <input
-                    autoComplete="new-password"
-                    minLength={8}
-                    name="password_confirmation"
-                    onChange={handleFormChange}
-                    required
-                    type="password"
-                    value={formState.form.password_confirmation}
-                  />
-                </label>
+              {!formState.employee && (
+                <>
+                  <label>
+                    <span>Contraseña inicial</span>
+                    <input
+                      autoComplete="new-password"
+                      minLength={8}
+                      name="password"
+                      onChange={handleFormChange}
+                      required
+                      type="password"
+                      value={formState.form.password}
+                    />
+                  </label>
+                  <label>
+                    <span>Confirmar contraseña</span>
+                    <input
+                      autoComplete="new-password"
+                      minLength={8}
+                      name="password_confirmation"
+                      onChange={handleFormChange}
+                      required
+                      type="password"
+                      value={formState.form.password_confirmation}
+                    />
+                  </label>
+                </>
               )}
               {formError && <p className="products-feedback error-message" role="alert">{formError}</p>}
               <div className="product-dialog-actions">
@@ -430,6 +474,78 @@ function EmployeesPage() {
                 </div>
               </dl>
             )}
+          </section>
+        </div>
+      )}
+
+      {passwordResetState && (
+        <div className="product-dialog-backdrop" onClick={() => setPasswordResetState(null)}>
+          <section
+            aria-labelledby="employee-password-title"
+            aria-modal="true"
+            className="product-dialog"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <header className="product-dialog-header">
+              <h2 id="employee-password-title">Restablecer contraseña</h2>
+              <button
+                aria-label="Cerrar restablecimiento de contraseña"
+                className="product-dialog-close"
+                onClick={() => setPasswordResetState(null)}
+                type="button"
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </header>
+            <form className="product-edit-form" onSubmit={handlePasswordResetSubmit}>
+              <p>Define una nueva contraseña para {passwordResetState.employee.name}. No se muestra la contraseña anterior.</p>
+              <label>
+                <span>Nueva contraseña</span>
+                <input
+                  autoComplete="new-password"
+                  minLength={8}
+                  onChange={(event) => setPasswordResetState((current) => ({
+                    ...current,
+                    password: event.target.value,
+                  }))}
+                  required
+                  type="password"
+                  value={passwordResetState.password}
+                />
+              </label>
+              <label>
+                <span>Confirmar nueva contraseña</span>
+                <input
+                  autoComplete="new-password"
+                  minLength={8}
+                  onChange={(event) => setPasswordResetState((current) => ({
+                    ...current,
+                    password_confirmation: event.target.value,
+                  }))}
+                  required
+                  type="password"
+                  value={passwordResetState.password_confirmation}
+                />
+              </label>
+              {passwordResetError && (
+                <p className="products-feedback error-message" role="alert">{passwordResetError}</p>
+              )}
+              <div className="product-dialog-actions">
+                <button
+                  className="secondary-button"
+                  disabled={savingPassword}
+                  onClick={() => setPasswordResetState(null)}
+                  type="button"
+                >
+                  Cancelar
+                </button>
+                <button className="primary-button" disabled={savingPassword} type="submit">
+                  <KeyRound size={16} aria-hidden="true" />
+                  {savingPassword ? 'Restableciendo…' : 'Restablecer contraseña'}
+                </button>
+              </div>
+            </form>
           </section>
         </div>
       )}

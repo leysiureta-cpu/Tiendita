@@ -122,6 +122,38 @@ class RoleAuthorizationTest extends TestCase
         ]);
     }
 
+    public function test_at_least_one_active_administrator_is_preserved(): void
+    {
+        $administrator = $this->createUser('Administrador', 'admin@example.test');
+        $otherAdministrator = $this->createUser('Administrador', 'other-admin@example.test');
+        $this->actingAs($administrator);
+
+        $this->patchJson('/api/admin/users/'.$otherAdministrator->id, [
+            'active' => false,
+        ])->assertOk()
+            ->assertJsonPath('data.active', false);
+
+        $this->patchJson('/api/admin/users/'.$administrator->id, [
+            'active' => false,
+        ])->assertForbidden();
+        $this->patchJson('/api/admin/users/'.$administrator->id, [
+            'roleId' => Rol::query()->where('nombre', 'Cajero')->value('id'),
+        ])->assertForbidden();
+
+        $this->assertDatabaseHas('usuarios', [
+            'id' => $administrator->id,
+            'estado' => true,
+        ]);
+        $this->assertDatabaseHas('usuarios', [
+            'id' => $otherAdministrator->id,
+            'estado' => false,
+        ]);
+        $this->assertSame(
+            1,
+            User::query()->where('rol_id', $administrator->rol_id)->where('estado', true)->count(),
+        );
+    }
+
     public function test_cashier_cannot_change_their_own_role_through_profile_updates(): void
     {
         $cashier = $this->createUser('Cajero', 'cashier@example.test');

@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Venta;
 use Database\Seeders\RolSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -37,6 +38,10 @@ class EmployeeManagementTest extends TestCase
         ])->assertForbidden();
         $this->patchJson('/api/admin/employees/'.$cashier->id, [
             'name' => 'Nombre modificado',
+        ])->assertForbidden();
+        $this->postJson('/api/admin/employees/'.$cashier->id.'/password', [
+            'password' => 'nueva-clave-segura',
+            'password_confirmation' => 'nueva-clave-segura',
         ])->assertForbidden();
     }
 
@@ -84,6 +89,13 @@ class EmployeeManagementTest extends TestCase
             'password_confirmation' => 'una-clave-segura',
         ];
 
+        $this->createUser('Cajero', 'duplicate@example.test');
+        $this->postJson('/api/admin/employees', [
+            ...$details,
+            'email' => 'DUPLICATE@example.test',
+        ])->assertUnprocessable();
+        $this->assertDatabaseMissing('usuarios', ['correo' => 'new@example.test']);
+
         $this->postJson('/api/admin/employees', [...$details, 'roleId' => $adminRoleId])
             ->assertUnprocessable();
         $this->assertDatabaseMissing('usuarios', ['correo' => 'new@example.test']);
@@ -100,6 +112,43 @@ class EmployeeManagementTest extends TestCase
         );
         $this->assertTrue(Hash::check('una-clave-segura', $employee->password));
         $this->assertTrue($response->json('data.active'));
+    }
+
+    public function test_employee_password_reset_is_a_separate_admin_action(): void
+    {
+        $administrator = $this->createUser('Administrador', 'admin@example.test');
+        $employee = $this->createUser('Cajero', 'cashier@example.test');
+        $this->actingAs($administrator);
+
+        $this->patchJson('/api/admin/employees/'.$employee->id, [
+            'password' => 'otra-clave-segura',
+            'password_confirmation' => 'otra-clave-segura',
+        ])->assertUnprocessable();
+
+        $this->postJson('/api/admin/employees/'.$employee->id.'/password', [
+            'password' => 'nueva-clave-segura',
+            'password_confirmation' => 'distinta-clave',
+        ])->assertUnprocessable();
+
+        $this->postJson('/api/admin/employees/'.$employee->id.'/password', [
+            'password' => 'nueva-clave-segura',
+            'password_confirmation' => 'nueva-clave-segura',
+        ])->assertOk()
+            ->assertJsonMissingPath('data.password')
+            ->assertJsonMissingPath('password')
+            ->assertJsonPath('message', 'La contraseña del empleado se restableció correctamente.');
+
+        $employee->refresh();
+        $this->assertTrue(Hash::check('nueva-clave-segura', $employee->password));
+        $this->assertFalse(Hash::check('una-clave-segura', $employee->password));
+
+        $this->postJson('/api/logout')->assertOk();
+        Auth::forgetGuards();
+        $this->postJson('/api/login', [
+            'correo' => 'cashier@example.test',
+            'password' => 'nueva-clave-segura',
+        ])->assertOk()
+            ->assertJsonPath('user.role', 'cashier');
     }
 
     public function test_administrator_can_edit_and_toggle_employee_without_deleting_sales_history(): void
@@ -145,6 +194,17 @@ class EmployeeManagementTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.active', true);
         $this->assertDatabaseHas('usuarios', ['id' => $employee->id, 'estado' => true]);
+    }
+
+    public function test_deactivated_cashier_cannot_log_in(): void
+    {
+        $employee = $this->createUser('Cajero', 'inactive@example.test');
+        $employee->update(['estado' => false]);
+
+        $this->postJson('/api/login', [
+            'correo' => 'inactive@example.test',
+            'password' => 'una-clave-segura',
+        ])->assertUnauthorized();
     }
 
     private function createUser(string $roleName, string $email, ?string $name = null): User

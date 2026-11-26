@@ -15,7 +15,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react'
 import MiniSuperLogo from '../components/MiniSuperLogo.jsx'
 import useAuth from '../hooks/useAuth.js'
-import { createSale, getProducts, getSalesRecords } from '../utils/api.js'
+import { createSale, getProducts, getSalesRecords, getStoreSettings } from '../utils/api.js'
 
 const currencyFormatter = new Intl.NumberFormat('es-MX', {
   style: 'currency',
@@ -50,7 +50,15 @@ function localDateKey(value) {
   return `${year}-${month}-${day}`
 }
 
-function SaleReceipt({ sale, onClose, onNewSale }) {
+function SaleReceipt({
+  sale,
+  storeSettings,
+  storeSettingsError,
+  onClose,
+  onNewSale,
+}) {
+  const storeName = storeSettings?.storeName || 'Mini Súper'
+
   return (
     <div className="sale-dialog-backdrop" onClick={onClose}>
       <section
@@ -62,9 +70,30 @@ function SaleReceipt({ sale, onClose, onNewSale }) {
       >
         <div className="sale-receipt-paper">
           <div className="sale-receipt-brand">
-            <MiniSuperLogo compact />
+            {storeSettings?.logoUrl ? (
+              <>
+                <img alt={`Logotipo de ${storeName}`} className="sale-receipt-logo" src={storeSettings.logoUrl} />
+                <strong className="sale-receipt-store-name">{storeName}</strong>
+              </>
+            ) : storeName === 'Mini Súper' ? (
+              <MiniSuperLogo compact />
+            ) : (
+              <strong className="sale-receipt-store-name">{storeName}</strong>
+            )}
             <p>COMPROBANTE DE VENTA</p>
           </div>
+          {(storeSettings?.address || storeSettings?.phone || storeSettings?.email) && (
+            <address className="sale-receipt-store-contact">
+              {storeSettings.address && <span>{storeSettings.address}</span>}
+              {storeSettings.phone && <span>Tel. {storeSettings.phone}</span>}
+              {storeSettings.email && <span>{storeSettings.email}</span>}
+            </address>
+          )}
+          {storeSettingsError && (
+            <p className="sale-receipt-settings-error" role="status">
+              No se pudo cargar la configuración de la tienda: {storeSettingsError}
+            </p>
+          )}
           <h2 id="sale-receipt-title">Venta {sale.number}</h2>
           <dl className="sale-receipt-meta">
             <div><dt>Fecha</dt><dd>{formatDateTime(sale.createdAt)}</dd></div>
@@ -93,7 +122,9 @@ function SaleReceipt({ sale, onClose, onNewSale }) {
               <div><dt>Cambio</dt><dd>{money(sale.change)}</dd></div>
             </>}
           </dl>
-          <p className="sale-receipt-thanks">Gracias por su compra</p>
+          <p className="sale-receipt-thanks">
+            {storeSettings?.ticketMessage || 'Gracias por su compra'}
+          </p>
         </div>
         <footer className="sale-receipt-actions">
           <button className="secondary-button" onClick={() => window.print()} type="button">
@@ -111,6 +142,10 @@ function SalesPage() {
   const isAdmin = user?.role === 'admin'
   const [productState, setProductState] = useState({ products: [], error: '' })
   const [salesState, setSalesState] = useState({ sales: [], error: '' })
+  const [storeSettingsState, setStoreSettingsState] = useState({
+    settings: null,
+    error: '',
+  })
   const [activeView, setActiveView] = useState('venta')
   const [search, setSearch] = useState('')
   const [historySearch, setHistorySearch] = useState('')
@@ -174,6 +209,32 @@ function SalesPage() {
   const canRegister = cartItems.length > 0 && !cartHasInvalidQuantities && discountIsValid &&
     Boolean(paymentMethod) && !cashInsufficient &&
     (paymentMethod === 'efectivo' || paymentConfirmed) && !isSubmitting
+
+  useEffect(() => {
+    let active = true
+    async function refreshStoreSettings() {
+      try {
+        const settings = await getStoreSettings()
+        if (active) setStoreSettingsState({ settings, error: '' })
+      } catch (error) {
+        if (active) {
+          setStoreSettingsState({
+            settings: null,
+            error: error instanceof Error
+              ? error.message
+              : 'No se pudo cargar la configuración de la tienda.',
+          })
+        }
+      }
+    }
+
+    void refreshStoreSettings()
+    window.addEventListener('focus', refreshStoreSettings)
+    return () => {
+      active = false
+      window.removeEventListener('focus', refreshStoreSettings)
+    }
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -512,6 +573,8 @@ function SalesPage() {
       {receiptSale && (
         <SaleReceipt
           sale={receiptSale}
+          storeSettings={storeSettingsState.settings}
+          storeSettingsError={storeSettingsState.error}
           onClose={() => setReceiptSale(null)}
           onNewSale={startNewSale}
         />

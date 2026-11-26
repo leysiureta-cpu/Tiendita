@@ -7,6 +7,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SalesController;
+use App\Http\Controllers\StoreSettingsController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:5,1');
@@ -27,8 +28,12 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::get('/sales', [SalesController::class, 'index']);
     Route::post('/sales', [SalesController::class, 'store']);
     Route::get('/sales/{sale}', [SalesController::class, 'show']);
+    Route::get('/store-settings', [StoreSettingsController::class, 'show']);
 
     Route::middleware('role:Administrador')->group(function () {
+        Route::post('/store-settings', [StoreSettingsController::class, 'update']);
+        Route::post('/store-settings/reverse-geocode', [StoreSettingsController::class, 'reverseGeocode'])
+            ->middleware('throttle:10,1');
         Route::get('/inventory/movements', [InventoryController::class, 'movements']);
         Route::post('/inventory/movements', [InventoryController::class, 'storeMovement']);
         Route::get('/users/count', [AuthController::class, 'userCount']);
@@ -51,5 +56,6 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::post('/admin/employees', [AdminUserController::class, 'storeEmployee']);
         Route::get('/admin/employees/{user}', [AdminUserController::class, 'showEmployee']);
         Route::patch('/admin/employees/{user}', [AdminUserController::class, 'updateEmployee']);
+        Route::post('/admin/employees/{user}/password', [AdminUserController::class, 'resetEmployeePassword']);
     });
 });

@@ -65,7 +65,7 @@ function responseErrorMessage(payload) {
   return validationMessage || payload?.message || 'No se pudo completar la solicitud.'
 }
 
-async function request(path, { method = 'GET', body } = {}) {
+async function request(path, { method = 'GET', body, signal } = {}) {
   const headers = { Accept: 'application/json' }
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData
 
@@ -82,6 +82,7 @@ async function request(path, { method = 'GET', body } = {}) {
     method,
     headers,
     body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
+    signal,
   })
   const payload = await readResponse(response)
 
@@ -197,6 +198,38 @@ export async function removeProfilePhoto() {
   return response.preferences
 }
 
+export async function getStoreSettings() {
+  const response = await request('/api/store-settings')
+  return response.data
+}
+
+export async function reverseGeocodeAddress(latitude, longitude, signal) {
+  const response = await request('/api/store-settings/reverse-geocode', {
+    method: 'POST',
+    body: { latitude, longitude },
+    signal,
+  })
+  return response.data
+}
+
+export async function saveStoreSettings(settings) {
+  const body = new FormData()
+  body.append('storeName', settings.storeName)
+  body.append('address', settings.address ?? '')
+  body.append('phone', settings.phone ?? '')
+  body.append('email', settings.email ?? '')
+  body.append('ticketMessage', settings.ticketMessage ?? '')
+  body.append('latitude', settings.latitude ?? '')
+  body.append('longitude', settings.longitude ?? '')
+  if (settings.logo) body.append('logo', settings.logo)
+
+  const response = await request('/api/store-settings', {
+    method: 'POST',
+    body,
+  })
+  return response.data
+}
+
 export async function getProducts(search = '') {
   const query = search ? `?search=${encodeURIComponent(search)}` : ''
   const response = await request(`/api/products${query}`)
@@ -295,7 +328,8 @@ export async function getSalesReport(startDate, endDate) {
     start_date: startDate,
     end_date: endDate,
   })
-  return request(`/api/reports/sales?${query}`)
+  const response = await request(`/api/reports/sales?${query}`)
+  return response.summary
 }
 
 export async function getRoles() {
@@ -349,4 +383,11 @@ export async function updateEmployee(employeeId, employee) {
     body: employee,
   })
   return response.data
+}
+
+export async function resetEmployeePassword(employeeId, password) {
+  return request(`/api/admin/employees/${encodeURIComponent(employeeId)}/password`, {
+    method: 'POST',
+    body: password,
+  })
 }

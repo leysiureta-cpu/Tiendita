@@ -35,4 +35,12 @@ return [
         ],
     ],
 
+    'nominatim' => [
+        'reverse_url' => 'https://nominatim.openstreetmap.org/reverse',
+        'user_agent' => env(
+            'NOMINATIM_USER_AGENT',
+            'MiniSuper/1.0 ('.env('APP_URL', 'http://localhost').')',
+        ),
+    ],
+
 ];

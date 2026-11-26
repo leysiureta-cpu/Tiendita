@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class AdminUserController extends Controller
@@ -90,7 +91,7 @@ class AdminUserController extends Controller
                 'max:255',
                 Rule::unique('usuarios', 'correo')->ignore($user->id),
             ],
-            'password' => ['sometimes', 'nullable', 'string', 'min:8', 'confirmed'],
+            'password' => ['prohibited'],
             'active' => ['sometimes', 'required', 'boolean'],
             'roleId' => ['prohibited'],
             'role_id' => ['prohibited'],
@@ -115,6 +116,21 @@ class AdminUserController extends Controller
 
         return response()->json([
             'data' => $this->employeeData($user->fresh('rol')),
+        ]);
+    }
+
+    public function resetEmployeePassword(Request $request, User $user): JsonResponse
+    {
+        $this->ensureEmployee($user);
+
+        $validated = $request->validate([
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $user->update(['password' => $validated['password']]);
+
+        return response()->json([
+            'message' => 'La contraseña del empleado se restableció correctamente.',
         ]);
     }
 
@@ -174,57 +190,65 @@ class AdminUserController extends Controller
             'active' => ['sometimes', 'required', 'boolean'],
         ]);
 
-        $actor = $request->user();
-        if ($actor->is($user)) {
-            $requestedRole = $validated['roleId'] ?? $user->rol_id;
-            if ((int) $requestedRole !== (int) $user->rol_id) {
-                abort(403, 'No puedes cambiar tu propio rol.');
+        return DB::transaction(function () use ($request, $user, $validated): JsonResponse {
+            $administratorRole = Rol::query()
+                ->where('nombre', 'Administrador')
+                ->lockForUpdate()
+                ->first();
+            abort_if($administratorRole === null, 500, 'El rol Administrador no está configurado.');
+
+            $user = User::query()->lockForUpdate()->findOrFail($user->id);
+            $actor = $request->user();
+            if ($actor->is($user)) {
+                $requestedRole = $validated['roleId'] ?? $user->rol_id;
+                if ((int) $requestedRole !== (int) $user->rol_id) {
+                    abort(403, 'No puedes cambiar tu propio rol.');
+                }
+                if (($validated['active'] ?? true) === false) {
+                    abort(403, 'No puedes desactivar tu propia cuenta.');
+                }
             }
-            if (($validated['active'] ?? true) === false) {
-                abort(403, 'No puedes desactivar tu propia cuenta.');
+
+            $currentRoleIsAdmin = (int) $user->rol_id === (int) $administratorRole->id;
+            $requestedRoleId = (int) ($validated['roleId'] ?? $user->rol_id);
+            $requestedRoleIsAdmin = $requestedRoleId === (int) $administratorRole->id;
+            $willRemainActive = $validated['active'] ?? $user->estado;
+
+            if ($currentRoleIsAdmin && $user->estado && (! $requestedRoleIsAdmin || ! $willRemainActive)) {
+                $otherActiveAdmins = User::query()
+                    ->where('rol_id', $administratorRole->id)
+                    ->where('estado', true)
+                    ->where('id', '!=', $user->id)
+                    ->exists();
+
+                if (! $otherActiveAdmins) {
+                    abort(422, 'Debe permanecer al menos una cuenta Administrador activa.');
+                }
             }
-        }
 
-        $currentRoleIsAdmin = $user->rol()->where('nombre', 'Administrador')->exists();
-        $requestedRoleIsAdmin = isset($validated['roleId'])
-            ? Rol::query()->whereKey($validated['roleId'])->where('nombre', 'Administrador')->exists()
-            : $currentRoleIsAdmin;
-        $willRemainActive = $validated['active'] ?? $user->estado;
-
-        if ($currentRoleIsAdmin && $user->estado && (! $requestedRoleIsAdmin || ! $willRemainActive)) {
-            $otherActiveAdmins = User::query()
-                ->where('estado', true)
-                ->where('id', '!=', $user->id)
-                ->whereHas('rol', fn ($query) => $query->where('nombre', 'Administrador'))
-                ->exists();
-
-            if (! $otherActiveAdmins) {
-                abort(422, 'Debe permanecer al menos una cuenta Administrador activa.');
+            $attributes = [];
+            if (array_key_exists('name', $validated)) {
+                $attributes['nombre'] = trim($validated['name']);
             }
-        }
+            if (array_key_exists('email', $validated)) {
+                $attributes['correo'] = $validated['email'];
+            }
+            if (array_key_exists('roleId', $validated)) {
+                $attributes['rol_id'] = $validated['roleId'];
+            }
+            if (array_key_exists('active', $validated)) {
+                $attributes['estado'] = $validated['active'];
+            }
+            if (! empty($validated['password'])) {
+                $attributes['password'] = $validated['password'];
+            }
 
-        $attributes = [];
-        if (array_key_exists('name', $validated)) {
-            $attributes['nombre'] = trim($validated['name']);
-        }
-        if (array_key_exists('email', $validated)) {
-            $attributes['correo'] = $validated['email'];
-        }
-        if (array_key_exists('roleId', $validated)) {
-            $attributes['rol_id'] = $validated['roleId'];
-        }
-        if (array_key_exists('active', $validated)) {
-            $attributes['estado'] = $validated['active'];
-        }
-        if (! empty($validated['password'])) {
-            $attributes['password'] = $validated['password'];
-        }
+            $user->update($attributes);
 
-        $user->update($attributes);
-
-        return response()->json([
-            'data' => $this->userData($user->fresh('rol')),
-        ]);
+            return response()->json([
+                'data' => $this->userData($user->fresh('rol')),
+            ]);
+        });
     }
 
     private function normalizeEmail(Request $request): void

@@ -2,6 +2,7 @@ import { Check, RotateCcw, Sun, Moon, Monitor, ImagePlus } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import ProfileAvatar from '../components/ProfileAvatar.jsx'
+import StoreSettingsSection from '../components/StoreSettingsSection.jsx'
 import useAuth from '../hooks/useAuth.js'
 import { PALETTES } from '../utils/appearance.js'
 
@@ -149,6 +150,8 @@ function SettingsPage() {
           <RotateCcw size={17} aria-hidden="true" /> Restablecer apariencia
         </button>
       </section>
+
+      {user.role === 'admin' && <StoreSettingsSection />}
     </section>
   )
 }
