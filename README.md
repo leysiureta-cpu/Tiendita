@@ -11,7 +11,7 @@ Mini Súper es una aplicación web de punto de venta para administrar productos,
 - Leysi Deniss Ureta Favela
 - Rosmery Espinoza Rocha
 - Santos Alberto Rivera Salinas
-- Mekina Avigail Castro Urias
+- Melina Avigail Castro Urias
 
 ## Tecnologías y bibliotecas utilizadas
 
